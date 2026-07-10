@@ -1,0 +1,17 @@
+{
+  "dataset": "outputs/validated_sms_dataset.csv",
+  "assignments_output": "outputs/clustering/local/semantic_clusters.csv",
+  "summary_output": "outputs/clustering/local/cluster_summary.md",
+  "embeddings_output": "outputs/clustering/local/embeddings/sms_embeddings.npy",
+  "metadata_output": "outputs/clustering/local/embeddings/metadata.json",
+  "embedding_provider": "sklearn-svd",
+  "embedding_model": "tfidf-word-bigram-truncated-svd",
+  "embedding_dimensions": 100,
+  "embedding_notes": "Local latent semantic analysis embeddings from TF-IDF plus TruncatedSVD. This is deterministic and requires no external service.",
+  "embedding_provider_role": "Local reproducibility fallback; this is not an LLM embedding model.",
+  "clustering_algorithm": "KMeans",
+  "cluster_count": 8,
+  "total_messages": 5572,
+  "silhouette_score": 0.09276474267244339,
+  "random_state": 42
+}

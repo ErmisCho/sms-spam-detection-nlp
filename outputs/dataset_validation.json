@@ -1,0 +1,25 @@
+{
+  "input_file": "data/raw/SMSSpamCollection",
+  "output_file": "outputs/validated_sms_dataset.csv",
+  "summary_file": "outputs/dataset_validation.json",
+  "detected_columns": [
+    "label",
+    "text"
+  ],
+  "label_column": "label",
+  "text_column": "text",
+  "delimiter": "\\t",
+  "encoding": "utf-8",
+  "raw_rows": 5572,
+  "validated_rows": 5572,
+  "ham_count": 4825,
+  "spam_count": 747,
+  "missing_label_count": 0,
+  "missing_text_count": 0,
+  "empty_text_count": 0,
+  "invalid_label_count": 0,
+  "duplicate_message_count": 703,
+  "duplicate_message_groups": 289,
+  "exact_duplicate_row_count": 703,
+  "duplicate_messages_removed": 0
+}

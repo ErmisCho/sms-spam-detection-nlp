@@ -1,0 +1,10 @@
+pandas>=2.2,<2.4
+numpy>=1.26,<2.3
+scipy>=1.11,<1.17
+scikit-learn>=1.5,<1.8
+matplotlib>=3.8,<3.11
+seaborn>=0.13,<0.14
+joblib>=1.4,<2.0
+
+# Install the local src/ package so `python -m sms_spam_ham_analysis...` works after one setup command.
+-e .

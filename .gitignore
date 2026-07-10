@@ -1,0 +1,58 @@
+# Python environments and caches
+.venv/
+.venv-win/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Generated project artifacts
+outputs/*
+!outputs/.gitkeep
+!outputs/artifact_index.md
+!outputs/classification_report.md
+!outputs/cluster_summary.md
+!outputs/clustering/
+!outputs/clustering/provider_comparison.md
+!outputs/clustering/local/
+!outputs/clustering/local/cluster_summary.md
+!outputs/clustering/local/embeddings/
+!outputs/clustering/local/embeddings/metadata.json
+!outputs/clustering/azure/
+!outputs/clustering/azure/cluster_summary.md
+!outputs/clustering/azure/embeddings/
+!outputs/clustering/azure/embeddings/metadata.json
+outputs/clustering/*/semantic_clusters.csv
+outputs/clustering/*/embeddings/*.npy
+!outputs/confusion_matrix.csv
+!outputs/dataset_validation.json
+!outputs/error_examples.csv
+!outputs/figures/
+!outputs/figures/*.png
+!outputs/frequent_words.md
+!outputs/model_metrics.json
+!outputs/ngram_findings.md
+!outputs/vocabulary_findings.md
+submissions/
+
+# Local or derived data
+data/raw/*
+!data/raw/.gitkeep
+data/processed/
+data/interim/
+
+# Serialized models and intermediate objects
+*.joblib
+*.pkl
+*.npy
+
+# Local editor and OS files
+.DS_Store
+.vscode/

@@ -1,0 +1,14 @@
+row_id,true_label,predicted_label,spam_probability,text,is_correct,error_type,confidence
+752,spam,ham,0.12128627795807946,"Do you realize that in about 40 years, we'll have thousands of old ladies running around with tattoos?",False,false_negative_spam,0.8787137220419206
+3361,spam,ham,0.1693394236404857,Sorry I missed your call let's talk when you have the time. I'm on 07090201529,False,false_negative_spam,0.8306605763595143
+2248,spam,ham,0.18172331189469476,"Hi ya babe x u 4goten bout me?' scammers getting smart..Though this is a regular vodafone no, if you respond you get further prem rate msg/subscription. Other nos used also. Beware!",False,false_negative_spam,0.8182766881053052
+3982,spam,ham,0.1883780648468775,ringtoneking 84484,False,false_negative_spam,0.8116219351531225
+1431,spam,ham,0.19808927540016288,For sale - arsenal dartboard. Good condition but no doubles or trebles!,False,false_negative_spam,0.8019107245998371
+2824,spam,ham,0.26260105660590827,ROMCAPspam Everyone around should be responding well to your presence since you are so warm and outgoing. You are bringing in a real breath of sunshine.,False,false_negative_spam,0.7373989433940917
+5450,spam,ham,0.31890956748893273,"Latest News! Police station toilet stolen, cops have nothing to go on!",False,false_negative_spam,0.6810904325110673
+5047,ham,spam,0.6269430922680275,"We have sent JD for Customer Service cum Accounts Executive to ur mail id, For details contact us",False,false_positive_spam,0.6269430922680275
+154,ham,spam,0.6082109924897138,Ok... Ur typical reply...,False,false_positive_spam,0.6082109924897138
+3540,ham,spam,0.5641486751720779,We are pleased to inform that your application for Airtel Broadband is processed successfully. Your installation will happen within 3 days.,False,false_positive_spam,0.5641486751720779
+3248,ham,spam,0.5588668312097325,"Funny fact Nobody teaches volcanoes 2 erupt, tsunamis 2 arise, hurricanes 2 sway aroundn no 1 teaches hw 2 choose a wife Natural disasters just happens",False,false_positive_spam,0.5588668312097325
+701,ham,spam,0.5204764959362406,K..u also dont msg or reply to his msg..,False,false_positive_spam,0.5204764959362406
+4660,ham,spam,0.5093946731578954,This message is from a great Doctor in India:-): 1) Do not drink APPY FIZZ. It contains Cancer causing age,False,false_positive_spam,0.5093946731578954

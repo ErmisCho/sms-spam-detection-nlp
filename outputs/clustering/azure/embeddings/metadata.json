@@ -1,0 +1,17 @@
+{
+  "dataset": "outputs/validated_sms_dataset.csv",
+  "assignments_output": "outputs/clustering/azure/semantic_clusters.csv",
+  "summary_output": "outputs/clustering/azure/cluster_summary.md",
+  "embeddings_output": "outputs/clustering/azure/embeddings/sms_embeddings.npy",
+  "metadata_output": "outputs/clustering/azure/embeddings/metadata.json",
+  "embedding_provider": "azure-openai",
+  "embedding_model": "text-embedding-3-small",
+  "embedding_dimensions": 1536,
+  "embedding_notes": "Azure embeddings API. Requires AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_EMBEDDING_DEPLOYMENT. API version: 2024-05-01-preview. Batch size: 256. Concurrency: 4.",
+  "embedding_provider_role": "GenAI embedding path for semantic clustering.",
+  "clustering_algorithm": "KMeans",
+  "cluster_count": 8,
+  "total_messages": 5572,
+  "silhouette_score": 0.026190856471657753,
+  "random_state": 42
+}
