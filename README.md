@@ -38,6 +38,12 @@ The duplicate-safe scores are the more credible generalization estimate. Their m
 
 The precision-recall curve shows the tradeoff available when changing the classification threshold. It is more informative than accuracy alone because only 13.4% of messages are SPAM; the marked operating point is the classifier's current decision threshold.
 
+## Clustering Provider Comparison
+
+![Local TF-IDF/SVD versus Azure embedding silhouette scores](outputs/figures/clustering_provider_comparison.png)
+
+For the same 5,572 messages and eight-cluster KMeans configuration, local TF-IDF/SVD achieved a silhouette score of 0.0928 versus 0.0262 for Azure `text-embedding-3-small`. Azure therefore did not improve geometric cluster separation in this experiment. Both scores are low, and silhouette alone does not establish semantic usefulness; the local path remains the default because it is also free, private, and reproducible.
+
 ## 30-Second Demo
 
 After completing [Setup](#setup) and [downloading the dataset](#dataset), run the complete local workflow with no API key:

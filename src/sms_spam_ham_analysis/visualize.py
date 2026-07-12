@@ -21,6 +21,7 @@ from sklearn.metrics import average_precision_score, precision_recall_curve
 from sms_spam_ham_analysis.config import (
     ARTIFACT_INDEX_PATH,
     CLASSIFICATION_REPORT_PATH,
+    CLUSTERING_PROVIDER_COMPARISON_FIGURE_PATH,
     CLUSTER_PROVIDER_COMPARISON_PATH,
     CLUSTER_SUMMARY_PATH,
     CONFUSION_MATRIX_FIGURE_PATH,
@@ -86,6 +87,10 @@ def run_visualizations(outputs_dir: Path, figures_dir: Path, artifact_index: Pat
             outputs_dir / TEST_PREDICTIONS_PATH.name,
             outputs_dir / MODEL_METRICS_PATH.name,
             figures_dir / PRECISION_RECALL_CURVE_FIGURE_PATH.name,
+        ),
+        _plot_clustering_provider_comparison(
+            outputs_dir,
+            figures_dir / CLUSTERING_PROVIDER_COMPARISON_FIGURE_PATH.name,
         ),
         _plot_semantic_clusters(_semantic_clusters_input(outputs_dir), figures_dir / SEMANTIC_CLUSTERS_FIGURE_PATH.name),
     ]
@@ -272,6 +277,61 @@ def _plot_precision_recall_curve(predictions_path: Path, metrics_path: Path, out
     ax.set_xlim(0, 1.01)
     ax.set_ylim(0, 1.03)
     ax.legend(loc="lower left")
+    _save(fig, output_path)
+    return output_path
+
+
+def _plot_clustering_provider_comparison(outputs_dir: Path, output_path: Path) -> Path:
+    provider_specs = [
+        ("local", "Local TF-IDF/SVD", "#54a24b", "No API key\nNo external data transfer"),
+        ("azure", "Azure embeddings", "#4c78a8", "Cloud cost and latency\nPrivacy review required"),
+    ]
+    providers = []
+    for folder, label, color, tradeoff in provider_specs:
+        metadata_path = outputs_dir / "clustering" / folder / "embeddings" / "metadata.json"
+        if not metadata_path.exists():
+            continue
+        metadata = _read_json(metadata_path)
+        providers.append(
+            {
+                "label": label,
+                "color": color,
+                "tradeoff": tradeoff,
+                "model": str(metadata.get("embedding_model", "")),
+                "dimensions": int(metadata.get("embedding_dimensions", 0)),
+                "messages": int(metadata.get("total_messages", 0)),
+                "clusters": int(metadata.get("cluster_count", 0)),
+                "silhouette": float(metadata.get("silhouette_score", 0.0)),
+            }
+        )
+    if not providers:
+        raise VisualizationError("No local or Azure clustering metadata found for provider comparison.")
+
+    labels = [f"{provider['label']}\n{provider['model']} ({provider['dimensions']:,}d)" for provider in providers]
+    scores = [provider["silhouette"] for provider in providers]
+    colors = [provider["color"] for provider in providers]
+    fig, ax = plt.subplots(figsize=(10, 7))
+    bars = ax.bar(labels, scores, color=colors, width=0.58)
+    ax.bar_label(bars, labels=[f"{score:.4f}" for score in scores], padding=5, fontsize=13)
+    ax.set_title("Local vs Azure Embeddings for KMeans Clustering\n5,572 messages • KMeans k=8", fontsize=18)
+    ax.set_ylabel("Silhouette score")
+    ax.set_ylim(0, max(0.12, max(scores) * 1.3))
+    ax.set_xlabel(
+        "Both scores are low; silhouette measures geometric separation, not complete semantic usefulness.",
+        fontsize=10,
+        labelpad=12,
+    )
+    for bar, provider in zip(bars, providers, strict=True):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() * 0.5,
+            provider["tradeoff"],
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="white",
+            fontweight="bold",
+        )
     _save(fig, output_path)
     return output_path
 

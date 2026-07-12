@@ -41,6 +41,7 @@ NGRAMS_FIGURE_PATH = FIGURES_DIR / "ngrams.png"
 CONFUSION_MATRIX_FIGURE_PATH = FIGURES_DIR / "confusion_matrix.png"
 MODEL_METRICS_COMPARISON_FIGURE_PATH = FIGURES_DIR / "model_metrics_comparison.png"
 PRECISION_RECALL_CURVE_FIGURE_PATH = FIGURES_DIR / "precision_recall_curve.png"
+CLUSTERING_PROVIDER_COMPARISON_FIGURE_PATH = FIGURES_DIR / "clustering_provider_comparison.png"
 SEMANTIC_CLUSTERS_FIGURE_PATH = FIGURES_DIR / "semantic_clusters.png"
 ARTIFACT_INDEX_PATH = OUTPUTS_DIR / "artifact_index.md"
 
