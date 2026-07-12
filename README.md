@@ -8,9 +8,9 @@ End-to-end NLP pipeline for SMS spam detection using the public SMS Spam Collect
 
 This is an independent portfolio project.
 
-![SMS spam classifier confusion matrix](outputs/figures/confusion_matrix.png)
+![Conventional and duplicate-safe SMS spam classifier confusion matrices](outputs/figures/confusion_matrix.png)
 
-*The row-stratified test evaluation makes the model's 6 false positives and 7 false negatives immediately reviewable; the project also reports a stricter duplicate-safe evaluation.*
+*The conventional split makes the model's 6 false positives and 7 false negatives reviewable, while the duplicate-safe matrix shows performance after eliminating identical train/test message overlap.*
 
 ## Portfolio Highlights
 
@@ -27,6 +27,16 @@ This is an independent portfolio project.
 - Duplicate-safe SPAM F1: 94.16%.
 - Duplicate-safe test split text overlap with training: 0.
 - Row-stratified errors: 6 false positives and 7 false negatives on the test split.
+
+## Model Evaluation Visuals
+
+![SPAM precision, recall, and F1 comparison](outputs/figures/model_metrics_comparison.png)
+
+The duplicate-safe scores are the more credible generalization estimate. Their modest reduction relative to the conventional split shows that the classifier remains strong after removing exact-text leakage.
+
+![SPAM precision-recall curve](outputs/figures/precision_recall_curve.png)
+
+The precision-recall curve shows the tradeoff available when changing the classification threshold. It is more informative than accuracy alone because only 13.4% of messages are SPAM; the marked operating point is the classifier's current decision threshold.
 
 ## 30-Second Demo
 

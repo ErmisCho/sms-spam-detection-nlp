@@ -285,7 +285,7 @@ class EndToEndPipelineTest(unittest.TestCase):
                 outputs / "figures",
                 outputs / "artifact_index.md",
             )
-            self.assertEqual(len(visualization.figures), 5)
+            self.assertEqual(len(visualization.figures), 7)
 
             required_files = [
                 "validated_sms_dataset.csv",
@@ -304,6 +304,8 @@ class EndToEndPipelineTest(unittest.TestCase):
                 "figures/vocabulary_comparison.png",
                 "figures/ngrams.png",
                 "figures/confusion_matrix.png",
+                "figures/model_metrics_comparison.png",
+                "figures/precision_recall_curve.png",
                 "figures/semantic_clusters.png",
             ]
             for relative_path in required_files:
