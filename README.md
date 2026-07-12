@@ -1,8 +1,16 @@
 # SMS Spam Detection NLP Pipeline
 
+[![CI](https://github.com/ErmisCho/sms-spam-detection-nlp/actions/workflows/ci.yml/badge.svg)](https://github.com/ErmisCho/sms-spam-detection-nlp/actions/workflows/ci.yml)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 End-to-end NLP pipeline for SMS spam detection using the public SMS Spam Collection dataset. The project validates the raw SMS file, explores text patterns, trains a classical spam classifier, and clusters messages by embedding similarity. It includes a fully local path for reproducibility and an optional Azure OpenAI / Azure AI Foundry embedding path for semantic clustering.
 
 This is an independent portfolio project.
+
+![SMS spam classifier confusion matrix](outputs/figures/confusion_matrix.png)
+
+*The row-stratified test evaluation makes the model's 6 false positives and 7 false negatives immediately reviewable; the project also reports a stricter duplicate-safe evaluation.*
 
 ## Portfolio Highlights
 
@@ -19,6 +27,23 @@ This is an independent portfolio project.
 - Duplicate-safe SPAM F1: 94.16%.
 - Duplicate-safe test split text overlap with training: 0.
 - Row-stratified errors: 6 false positives and 7 false negatives on the test split.
+
+## 30-Second Demo
+
+After completing [Setup](#setup) and [downloading the dataset](#dataset), run the complete local workflow with no API key:
+
+```bash
+bash scripts/run_pipeline.sh
+```
+
+On Windows PowerShell, use `.\scripts\run_pipeline.ps1` instead. The workflow validates the raw data, analyzes its vocabulary, trains and evaluates the classifier, clusters messages, and refreshes the reviewable artifacts in `outputs/`.
+
+For a quick results tour, open:
+
+- [Classification report](outputs/classification_report.md) for row-stratified and duplicate-safe metrics.
+- [Error examples](outputs/error_examples.csv) to inspect false positives and false negatives.
+- [Cluster summary](outputs/cluster_summary.md) for discovered message themes and label mix.
+- [Artifact index](outputs/artifact_index.md) for the complete generated deliverable set.
 
 ## What It Demonstrates
 
@@ -128,6 +153,14 @@ python -m sms_spam_ham_analysis.clustering --dataset outputs/validated_sms_datas
 python -m sms_spam_ham_analysis.visualize --outputs outputs
 ```
 
+Try the trained classifier on a message (the local pipeline must have been run first):
+
+```bash
+python -m sms_spam_ham_analysis.predict "Congratulations, claim your free prize now"
+```
+
+The command prints the predicted `HAM`/`SPAM` label and the classifier's confidence.
+
 If the dataset has not been downloaded yet, run:
 
 ```bash
@@ -167,6 +200,14 @@ Important generated files:
 - `clustering.py`: KMeans clustering over embedding vectors, cluster summaries, provider-specific output folders, and silhouette diagnostics.
 - `visualize.py`: compact figures, artifact index, and provider comparison.
 
+## Engineering Decisions
+
+- **Start with an interpretable baseline.** TF-IDF and Logistic Regression are fast, reproducible, and easy to inspect. They establish a strong benchmark before adding more expensive model complexity.
+- **Evaluate duplicate-safe performance.** Repeated SMS text can leak across a conventional random split and inflate results. The grouped evaluation keeps normalized duplicate messages together and reports zero train/test text overlap.
+- **Keep the default workflow local.** TF-IDF/SVD clustering makes the full pipeline runnable without credentials, network calls, or per-request cost. Azure embeddings remain an explicit opt-in path for comparing semantic representations.
+- **Treat errors as deliverables.** Aggregate metrics are paired with a confusion matrix and exported misclassifications so reviewers can examine failure modes—especially spam false negatives—rather than relying on accuracy alone.
+- **Separate generated artifacts by provider.** Local and Azure clustering outputs retain their own metadata and summaries, making comparisons traceable without silently overwriting the provenance of a result.
+
 ## Verification
 
 Run the automated smoke tests without the real dataset:
@@ -191,4 +232,4 @@ python -m compileall -q src
 - The classifier is a strong baseline, not a production spam filter.
 - Clustering is exploratory. Silhouette score is a useful separation diagnostic, but provider choice should also consider representative messages, label mix, business usefulness, cost, privacy, and reproducibility.
 - Azure embeddings require approved data handling, credentials, and cost awareness.
-- A production version would add CI, Docker, monitoring, retraining strategy, threshold tuning, and a serving/integration path.
+- A production version would add Docker, monitoring, retraining strategy, threshold tuning, and a serving/integration path.

@@ -6,7 +6,7 @@ Use this checklist before pushing the project to a public GitHub repository.
 
 - `README.md`
 - `requirements.txt`
-- `setup.py`
+- `pyproject.toml`
 - `.env.example`
 - `src/`
 - `scripts/`
