@@ -23,4 +23,6 @@
 - `outputs/figures/vocabulary_comparison.png` - present
 - `outputs/figures/ngrams.png` - present
 - `outputs/figures/confusion_matrix.png` - present
+- `outputs/figures/model_metrics_comparison.png` - present
+- `outputs/figures/precision_recall_curve.png` - present
 - `outputs/figures/semantic_clusters.png` - present
