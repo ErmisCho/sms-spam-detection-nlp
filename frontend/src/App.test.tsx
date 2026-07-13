@@ -31,9 +31,9 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByText("Model ready")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Suspicious offer" }));
-    await user.click(screen.getByRole("button", { name: "Analyze message" }));
+    expect(await screen.findByText("Service ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Suspicious promotion" }));
+    await user.click(screen.getByRole("button", { name: "Run classification" }));
 
     expect(await screen.findByRole("heading", { name: "Likely spam" })).toBeInTheDocument();
     expect(screen.getByText("94.3%")).toBeInTheDocument();
@@ -55,7 +55,7 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "Analyze message" }));
+    await user.click(screen.getByRole("button", { name: "Run classification" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Enter an SMS message");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -68,9 +68,9 @@ describe("App", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(await screen.findByText("Model unavailable")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Dinner plans" }));
-    await user.click(screen.getByRole("button", { name: "Analyze message" }));
+    expect(await screen.findByText("Service unavailable")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Personal message" }));
+    await user.click(screen.getByRole("button", { name: "Run classification" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Train or mount the model");
   });
