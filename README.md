@@ -4,11 +4,23 @@
 [![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-End-to-end NLP pipeline for SMS spam detection using the public SMS Spam Collection dataset. The project validates the raw SMS file, explores text patterns, trains a classical spam classifier, and clusters messages by embedding similarity. It includes a fully local path for reproducibility and an optional Azure OpenAI / Azure AI Foundry embedding path for semantic clustering.
+![SMS Spam Detection portfolio project](docs/assets/github-social-preview.jpg)
 
-This is an independent portfolio project.
+Classify a new SMS as legitimate or spam, return a confidence score, and serve the result through a tested API. This independent portfolio project shows the complete path from raw data to a reproducible, containerized ML service—not only a notebook or model score.
 
-## Practical Example
+[See it work](#see-it-work) · [Review the results](#results-at-a-glance) · [Run it locally](#setup) · [Use the API](#prediction-api) · [View the architecture](docs/architecture.md)
+
+## At a Glance
+
+| Question | Answer |
+| --- | --- |
+| What problem does it solve? | Flags suspicious SMS messages while keeping prediction confidence visible. |
+| What does it deliver? | Reproducible training pipeline, CLI, FastAPI service, Docker image, tests, reports, and diagrams. |
+| How well does it work? | 94.16% duplicate-safe SPAM F1; the conventional split produced only 13 errors across 1,115 test messages. |
+| Can it run without cloud services? | Yes. The complete default path is local, private, and requires no API key. |
+| What makes the evaluation credible? | Exact duplicate messages are kept out of both train and test, eliminating text overlap in the stricter evaluation. |
+
+## See It Work
 
 Give the trained model a new SMS message:
 
@@ -21,44 +33,55 @@ Prediction: SPAM
 Confidence: 94.3%
 ```
 
-This shows that the project is more than a static analysis: it packages the trained pipeline so it can classify previously unseen messages through both a CLI and a typed HTTP API. The containerized service demonstrates how the classifier could integrate with a moderation queue or customer-support filtering tool. An internet-facing production deployment would additionally require authenticated ingress, metrics/alerting, privacy review, and periodic retraining.
+The same prediction is available from the CLI, interactive OpenAPI page, or containerized HTTP API.
 
-![Conventional and duplicate-safe SMS spam classifier confusion matrices](outputs/figures/confusion_matrix.png)
+```mermaid
+flowchart LR
+    A[New SMS] --> B[Validated API request]
+    B --> C[TF-IDF representation]
+    C --> D[Logistic Regression]
+    D --> E[HAM or SPAM + confidence]
+```
 
-*The conventional split makes the model's 6 false positives and 7 false negatives reviewable, while the duplicate-safe matrix shows performance after eliminating identical train/test message overlap.*
+## Results at a Glance
 
-## Portfolio Highlights
+| Evaluation | Accuracy | SPAM F1 | Exact train/test text overlap |
+| --- | ---: | ---: | ---: |
+| Conventional row split | 98.83% | 95.62% | 117 messages |
+| Duplicate-safe split | 98.60% | **94.16%** | **0 messages** |
 
-- End-to-end NLP workflow: dataset download, validation, exploration, modeling, clustering, visualization, and generated reports.
-- Reproducible local baseline using TF-IDF, Logistic Regression, and TF-IDF/SVD clustering with no API key required.
-- Optional GenAI path using Azure embeddings for semantic clustering, with fail-fast credential checks and provider-specific artifacts.
-- Stricter duplicate-safe evaluation to reduce overly optimistic scores from repeated SMS text.
-- Cross-platform automation for Windows PowerShell and Linux/WSL, plus smoke tests for the core pipeline.
-- Typed FastAPI serving, privacy-safe structured logs, contract tests, and a non-root Docker image with model readiness checks.
-
-## Headline Results
-
-- Row-stratified classifier accuracy: 98.83%.
-- Row-stratified SPAM F1: 95.62%.
-- Duplicate-safe SPAM F1: 94.16%.
-- Duplicate-safe test split text overlap with training: 0.
-- Row-stratified errors: 6 false positives and 7 false negatives on the test split.
-
-## Model Evaluation Visuals
+The duplicate-safe result is the preferred estimate because it prevents identical SMS text from appearing on both sides of the evaluation.
 
 ![SPAM precision, recall, and F1 comparison](outputs/figures/model_metrics_comparison.png)
 
-The duplicate-safe scores are the more credible generalization estimate. Their modest reduction relative to the conventional split shows that the classifier remains strong after removing exact-text leakage.
+## Why It Stands Out
+
+- **Usable software, not only analysis:** a typed FastAPI service, OpenAPI contract, CLI, non-root Docker image, and readiness checks make the model practical to integrate.
+- **Honest evaluation:** duplicate-safe testing exposes leakage instead of presenting the most flattering number.
+- **Reviewable failure modes:** confusion matrices and exported false positives/negatives show where the classifier is wrong.
+- **Reproducible by default:** uv lockfile, Python 3.10–3.13 CI, deterministic tests, and a fully local path require no secrets.
+- **Evidence-based cloud comparison:** optional Azure embeddings were tested, documented, and rejected as the default when they did not improve cluster separation.
+
+<details>
+<summary><strong>Explore the detailed evaluation charts</strong></summary>
+
+### Confusion matrices
+
+![Conventional and duplicate-safe SMS spam classifier confusion matrices](outputs/figures/confusion_matrix.png)
+
+The conventional split makes the model's six false positives and seven false negatives visible. The second matrix shows performance after eliminating identical train/test message overlap.
 
 ![SPAM precision-recall curve](outputs/figures/precision_recall_curve.png)
 
-The precision-recall curve shows the tradeoff available when changing the classification threshold. It is more informative than accuracy alone because only 13.4% of messages are SPAM; the marked operating point is the classifier's current decision threshold.
+This curve shows how stricter or looser thresholds trade spam recall against false alarms. It is more informative than accuracy alone because only 13.4% of messages are spam.
 
-## Clustering Provider Comparison
+### Local versus Azure clustering
 
 ![Local TF-IDF/SVD versus Azure embedding silhouette scores](outputs/figures/clustering_provider_comparison.png)
 
-For the same 5,572 messages and eight-cluster KMeans configuration, local TF-IDF/SVD achieved a silhouette score of 0.0928 versus 0.0262 for Azure `text-embedding-3-small`. Azure therefore did not improve geometric cluster separation in this experiment. Both scores are low, and silhouette alone does not establish semantic usefulness; the local path remains the default because it is also free, private, and reproducible.
+Across the same 5,572 messages, local TF-IDF/SVD achieved a silhouette score of 0.0928 versus 0.0262 for Azure `text-embedding-3-small`. Azure did not improve cluster separation in this experiment, so the free, private, reproducible local path remains the default.
+
+</details>
 
 ## 30-Second Demo
 
@@ -77,16 +100,11 @@ For a quick results tour, open:
 - [Cluster summary](outputs/cluster_summary.md) for discovered message themes and label mix.
 - [Artifact index](outputs/artifact_index.md) for the complete generated deliverable set.
 
-## What It Demonstrates
+## Technical Guide
 
-- Data validation for a raw text classification dataset.
-- Exploratory NLP analysis: frequent words, spam-vs-legitimate vocabulary differences, bigrams, and trigrams.
-- Classical ML classification with TF-IDF and Logistic Regression.
-- Evaluation with metrics, confusion matrix, representative errors, and duplicate-safe grouped validation.
-- Semantic clustering with either local TF-IDF/SVD embeddings or Azure embedding vectors.
-- Reproducible Windows and Linux/WSL scripts, tests, and reviewable output artifacts.
+The sections below contain the reproducible setup, API, Docker, architecture, and verification details for technical reviewers.
 
-## Dataset
+### Dataset
 
 The project uses the public SMS Spam Collection dataset from the UCI Machine Learning Repository. The repository includes only an empty placeholder directory, not the raw dataset file.
 
@@ -117,7 +135,7 @@ The UCI dataset page states that the dataset is licensed under Creative Commons 
 
 Source: https://archive.ics.uci.edu/dataset/228/sms+spam+collection
 
-## Setup
+### Setup
 
 Use Python 3.10 through 3.13 from the repository root. The recommended workflow uses [uv](https://docs.astral.sh/uv/); `uv.lock` pins a reproducible dependency set.
 
@@ -138,7 +156,7 @@ uv sync --locked
 
 If uv is unavailable, `requirements.txt` remains a pip-compatible fallback that installs the third-party libraries and local `src/` package.
 
-## Run
+### Run
 
 Recommended local run on Windows:
 
@@ -193,7 +211,7 @@ uv run --frozen python -m sms_spam_ham_analysis.predict "Congratulations, claim 
 
 The command prints the predicted `HAM`/`SPAM` label and the classifier's confidence. On the current trained artifact, this example is classified as `SPAM` with 94.3% confidence.
 
-### Prediction API
+#### Prediction API
 
 Start the typed HTTP service after training the local model:
 
@@ -230,7 +248,7 @@ Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. 
 
 The API uses `outputs/models/tfidf_classifier.joblib` by default. Set `SMS_SPAM_MODEL_PATH` to an alternative trusted artifact path before startup when needed.
 
-### Docker
+#### Docker
 
 Build the non-root API image:
 
@@ -260,13 +278,13 @@ If the dataset has not been downloaded yet, run:
 uv run --frozen python -m sms_spam_ham_analysis.download_data
 ```
 
-## Azure Embeddings
+### Azure Embeddings
 
 The default local run does not need `.env`. For Azure semantic clustering, copy `.env.example` to `.env` and fill in every `AZURE_OPENAI_*` value before running an Azure command. Azure pipeline variants fail before dataset validation if required values are missing or still contain template placeholders.
 
 Azure sends SMS text to the configured embedding deployment, so consider cost, privacy, and data handling policy before using it. If Azure returns rate-limit or transient service errors, lower `AZURE_OPENAI_CONCURRENCY` first.
 
-## Outputs
+### Outputs
 
 Important generated files:
 
@@ -284,7 +302,7 @@ Important generated files:
 - `outputs/clustering/provider_comparison.md`: local-vs-Azure clustering comparison based on generated provider metadata.
 - `outputs/artifact_index.md`: generated tables, reports, models, and figures.
 
-## Architecture
+### Architecture
 
 See the [prediction service architecture](docs/architecture.md) and [serving decision record](docs/adr/0001-serve-the-existing-model-through-a-thin-api.md) for the runtime diagram, health semantics, privacy boundaries, and deliberately excluded production infrastructure.
 
@@ -297,7 +315,7 @@ See the [prediction service architecture](docs/architecture.md) and [serving dec
 - `predict.py`: shared cached artifact loading and confidence-based single-message prediction used by both CLI and API.
 - `api.py`: typed FastAPI contracts, liveness/readiness checks, request IDs, privacy-safe structured logs, and HTTP error mapping.
 
-## Engineering Decisions
+### Engineering Decisions
 
 - **Start with an interpretable baseline.** TF-IDF and Logistic Regression are fast, reproducible, and easy to inspect. They establish a strong benchmark before adding more expensive model complexity.
 - **Evaluate duplicate-safe performance.** Repeated SMS text can leak across a conventional random split and inflate results. The grouped evaluation keeps normalized duplicate messages together and reports zero train/test text overlap.
@@ -306,7 +324,7 @@ See the [prediction service architecture](docs/architecture.md) and [serving dec
 - **Separate generated artifacts by provider.** Local and Azure clustering outputs retain their own metadata and summaries, making comparisons traceable without silently overwriting the provenance of a result.
 - **Keep serving thin and stateless.** FastAPI adapts the shared prediction function instead of reimplementing model behavior; the trusted model is mounted separately so application and artifact releases remain independent.
 
-## Verification
+### Verification
 
 Run the automated smoke tests without the real dataset:
 
@@ -327,7 +345,7 @@ uv run --frozen coverage report --include="src/sms_spam_ham_analysis/api.py,src/
 uv run --frozen python -m compileall -q src
 ```
 
-## Limitations
+### Limitations
 
 - The SMS dataset is old, so modern spam patterns may differ.
 - The classifier is a strong baseline, not a production spam filter.
