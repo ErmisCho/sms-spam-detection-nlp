@@ -8,19 +8,11 @@ const EXAMPLES = {
 
 type ServiceState = "checking" | "ready" | "unavailable";
 
-function ShieldMark() {
-  return (
-    <span className="shield" aria-hidden="true">
-      <span />
-    </span>
-  );
-}
-
 function ServiceStatus({ state }: { state: ServiceState }) {
   const copy = {
-    checking: "Checking model",
-    ready: "Model ready",
-    unavailable: "Model unavailable",
+    checking: "Checking service",
+    ready: "Service ready",
+    unavailable: "Service unavailable",
   }[state];
 
   return (
@@ -36,38 +28,64 @@ function ResultCard({ result }: { result: TimedPrediction }) {
   const confidence = Math.round(result.confidence * 1000) / 10;
 
   return (
-    <section className={`result result--${result.label}`} aria-live="polite" aria-atomic="true">
-      <div className="result__heading">
-        <div className="result__icon" aria-hidden="true">
-          {isSpam ? "!" : "✓"}
+    <div className="assessment" aria-live="polite" aria-atomic="true">
+      <div className={`assessment__status assessment__status--${result.label}`}>
+        <span className="assessment__marker" aria-hidden="true">
+          {isSpam ? "S" : "H"}
+        </span>
+        <div>
+          <span className="field-label">Classification</span>
+          <h2>{isSpam ? "Likely spam" : "Likely legitimate"}</h2>
+        </div>
+        <span className="classification-tag">{result.label}</span>
+      </div>
+
+      <div className="confidence-block">
+        <div className="confidence-row">
+          <span>Model confidence</span>
+          <strong>{confidence}%</strong>
+        </div>
+        <div
+          className={`confidence-track confidence-track--${result.label}`}
+          role="progressbar"
+          aria-label="Model confidence"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(confidence)}
+        >
+          <span style={{ width: `${confidence}%` }} />
+        </div>
+      </div>
+
+      <dl className="result-details">
+        <div>
+          <dt>Model</dt>
+          <dd>TF-IDF + Logistic Regression</dd>
         </div>
         <div>
-          <p className="eyebrow">Prediction</p>
-          <h2>{isSpam ? "Likely spam" : "Looks legitimate"}</h2>
+          <dt>Request time</dt>
+          <dd>{result.latencyMs} ms</dd>
         </div>
-        <span className="result__label">{result.label}</span>
-      </div>
+        <div>
+          <dt>Recommended action</dt>
+          <dd>{isSpam ? "Review before delivery" : "No automated action"}</dd>
+        </div>
+      </dl>
 
-      <div className="confidence-row">
-        <span>Model confidence</span>
-        <strong>{confidence}%</strong>
-      </div>
-      <div
-        className="confidence-track"
-        role="progressbar"
-        aria-label="Model confidence"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(confidence)}
-      >
-        <span style={{ width: `${confidence}%` }} />
-      </div>
+      <p className="assessment-note">
+        This score supports review decisions; it is not a guarantee that the message is safe or malicious.
+      </p>
+    </div>
+  );
+}
 
-      <div className="result__meta">
-        <span>TF-IDF + Logistic Regression</span>
-        <span>{result.latencyMs} ms round trip</span>
-      </div>
-    </section>
+function EmptyAssessment() {
+  return (
+    <div className="empty-assessment">
+      <div className="empty-assessment__symbol" aria-hidden="true">—</div>
+      <h2>No assessment yet</h2>
+      <p>Enter an SMS message and run the classifier to view its label and confidence.</p>
+    </div>
   );
 }
 
@@ -129,51 +147,66 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#main" aria-label="MessageGuard home">
-          <ShieldMark />
-          <span>MessageGuard</span>
-        </a>
-        <ServiceStatus state={serviceState} />
+      <header className="app-header">
+        <div className="header-inner">
+          <a className="brand" href="#main" aria-label="MessageGuard home">
+            <span className="brand-mark" aria-hidden="true">M</span>
+            <span>
+              <strong>MessageGuard</strong>
+              <small>SMS classification service</small>
+            </span>
+          </a>
+          <div className="header-actions">
+            <a className="docs-link" href="/docs">API documentation</a>
+            <ServiceStatus state={serviceState} />
+          </div>
+        </div>
       </header>
 
-      <main id="main" className="main-grid">
-        <section className="intro">
-          <p className="kicker">Interpretable NLP · privacy-first demo</p>
-          <h1>Know what is safe.<br />Catch what is not.</h1>
-          <p className="intro__copy">
-            Classify an SMS in milliseconds with a locally trained model. Your message is processed
-            in memory and never written to application logs.
-          </p>
-
-          <div className="proof-points" aria-label="Model qualities">
-            <div>
-              <strong>94.16%</strong>
-              <span>duplicate-safe spam F1</span>
-            </div>
-            <div>
-              <strong>0</strong>
-              <span>exact train/test overlaps</span>
-            </div>
-            <div>
-              <strong>Local</strong>
-              <span>default inference path</span>
-            </div>
+      <main id="main" className="content">
+        <section className="page-heading" aria-labelledby="page-title">
+          <div>
+            <p className="section-label">Classification workspace</p>
+            <h1 id="page-title">SMS risk assessment</h1>
+            <p>
+              Review one message using the deployed statistical classifier. Results are intended to
+              support human decisions, not replace them.
+            </p>
           </div>
+
+          <dl className="model-summary" aria-label="Model evaluation summary">
+            <div>
+              <dt>Spam F1</dt>
+              <dd>94.16%</dd>
+            </div>
+            <div>
+              <dt>Evaluation</dt>
+              <dd>Duplicate-safe</dd>
+            </div>
+            <div>
+              <dt>Message retention</dt>
+              <dd>None</dd>
+            </div>
+          </dl>
         </section>
 
-        <section className="classifier-card" aria-labelledby="classifier-title">
-          <div className="card-heading">
-            <div>
-              <p className="eyebrow">Live classifier</p>
-              <h2 id="classifier-title">Check a message</h2>
+        <div className="workspace-grid">
+          <section className="panel input-panel" aria-labelledby="classifier-title">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">New request</p>
+                <h2 id="classifier-title">Analyze a message</h2>
+              </div>
+              <span className="endpoint-label">POST /api/v1/predict</span>
             </div>
-            <span className="api-chip">API connected</span>
-          </div>
 
-          <form onSubmit={handleSubmit}>
-            <label htmlFor={textareaId}>SMS message</label>
-            <div className="textarea-wrap">
+            <form onSubmit={handleSubmit}>
+              <div className="field-heading">
+                <label htmlFor={textareaId}>Message text</label>
+                <span id={`${textareaId}-hint`} className="character-count">
+                  {message.length.toLocaleString()} / 10,000
+                </span>
+              </div>
               <textarea
                 id={textareaId}
                 value={message}
@@ -182,48 +215,61 @@ export default function App() {
                   if (error) setError("");
                 }}
                 maxLength={10_000}
-                rows={6}
-                placeholder="Paste a message here…"
-                aria-describedby={`${textareaId}-hint`}
+                rows={8}
+                placeholder="Paste an SMS message for assessment"
+                aria-describedby={`${textareaId}-hint ${textareaId}-privacy`}
               />
-              <span id={`${textareaId}-hint`} className="character-count">
-                {message.length.toLocaleString()} / 10,000
-              </span>
-            </div>
 
-            <div className="example-row">
-              <span>Try an example</span>
-              <button type="button" className="example-button example-button--spam" onClick={() => useExample("spam")}>
-                Suspicious offer
+              <div className="example-row">
+                <span>Sample messages:</span>
+                <button type="button" className="secondary-button" onClick={() => useExample("spam")}>
+                  Suspicious promotion
+                </button>
+                <button type="button" className="secondary-button" onClick={() => useExample("ham")}>
+                  Personal message
+                </button>
+              </div>
+
+              <p id={`${textareaId}-privacy`} className="privacy-note">
+                Message text is processed in memory and excluded from application logs.
+              </p>
+
+              {error && <div className="error-message" role="alert">{error}</div>}
+
+              <button className="primary-button" type="submit" disabled={loading}>
+                {loading && <span className="spinner" aria-hidden="true" />}
+                {loading ? "Running classification…" : "Run classification"}
               </button>
-              <button type="button" className="example-button" onClick={() => useExample("ham")}>
-                Dinner plans
-              </button>
+            </form>
+          </section>
+
+          <section className="panel result-panel" aria-labelledby="assessment-title">
+            <div className="panel-header">
+              <div>
+                <p className="section-label">Current result</p>
+                <h2 id="assessment-title">Assessment</h2>
+              </div>
             </div>
+            {result ? <ResultCard result={result} /> : <EmptyAssessment />}
+          </section>
+        </div>
 
-            {error && <div className="error-message" role="alert">{error}</div>}
-
-            <button className="submit-button" type="submit" disabled={loading}>
-              {loading ? <span className="spinner" aria-hidden="true" /> : <span aria-hidden="true">✦</span>}
-              {loading ? "Analyzing message…" : "Analyze message"}
-            </button>
-          </form>
-
-          {result ? (
-            <ResultCard result={result} />
-          ) : (
-            <div className="empty-state" aria-hidden="true">
-              <span>01</span>
-              <div />
-              <span>HAM / SPAM</span>
-            </div>
-          )}
+        <section className="evaluation-context" aria-labelledby="evaluation-title">
+          <h2 id="evaluation-title">Evaluation context</h2>
+          <p>
+            The displayed 94.16% spam F1 comes from a grouped split with zero exact message overlap
+            between training and test data. The underlying public SMS dataset is historical, so modern
+            production use would require monitoring, threshold governance, and periodic retraining.
+          </p>
+          <a href="/docs">Review the API contract</a>
         </section>
       </main>
 
-      <footer>
-        <span>Built with React, TypeScript, FastAPI and scikit-learn</span>
-        <a href="/docs">Explore the API ↗</a>
+      <footer className="app-footer">
+        <div>
+          <span>Independent portfolio reference implementation</span>
+          <span>React · TypeScript · FastAPI · scikit-learn</span>
+        </div>
       </footer>
     </div>
   );
