@@ -5,6 +5,8 @@ scikit-learn>=1.5,<1.8
 matplotlib>=3.8,<3.11
 seaborn>=0.13,<0.14
 joblib>=1.4,<2.0
+fastapi>=0.115,<0.116
+uvicorn>=0.34,<1.0
 
 # Install the local src/ package so `python -m sms_spam_ham_analysis...` works after one setup command.
 -e .

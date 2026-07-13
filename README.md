@@ -8,6 +8,21 @@ End-to-end NLP pipeline for SMS spam detection using the public SMS Spam Collect
 
 This is an independent portfolio project.
 
+## Practical Example
+
+Give the trained model a new SMS message:
+
+> Congratulations, claim your free prize now
+
+It returns:
+
+```text
+Prediction: SPAM
+Confidence: 94.3%
+```
+
+This shows that the project is more than a static analysis: it packages the trained pipeline so it can classify previously unseen messages through both a CLI and a typed HTTP API. The containerized service demonstrates how the classifier could integrate with a moderation queue or customer-support filtering tool. An internet-facing production deployment would additionally require authenticated ingress, metrics/alerting, privacy review, and periodic retraining.
+
 ![Conventional and duplicate-safe SMS spam classifier confusion matrices](outputs/figures/confusion_matrix.png)
 
 *The conventional split makes the model's 6 false positives and 7 false negatives reviewable, while the duplicate-safe matrix shows performance after eliminating identical train/test message overlap.*
@@ -19,6 +34,7 @@ This is an independent portfolio project.
 - Optional GenAI path using Azure embeddings for semantic clustering, with fail-fast credential checks and provider-specific artifacts.
 - Stricter duplicate-safe evaluation to reduce overly optimistic scores from repeated SMS text.
 - Cross-platform automation for Windows PowerShell and Linux/WSL, plus smoke tests for the core pipeline.
+- Typed FastAPI serving, privacy-safe structured logs, contract tests, and a non-root Docker image with model readiness checks.
 
 ## Headline Results
 
@@ -103,25 +119,24 @@ Source: https://archive.ics.uci.edu/dataset/228/sms+spam+collection
 
 ## Setup
 
-Use Python 3.10 or newer from the repository root.
+Use Python 3.10 through 3.13 from the repository root. The recommended workflow uses [uv](https://docs.astral.sh/uv/); `uv.lock` pins a reproducible dependency set.
 
 Native Windows PowerShell:
 
 ```powershell
-python -m venv .venv-win
-.\.venv-win\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win"
+uv sync --locked
 ```
+
+The explicit Windows environment name avoids colliding with the Linux/WSL `.venv` when both systems use the same checkout.
 
 Linux or WSL:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+uv sync --locked
 ```
 
-`requirements.txt` installs the third-party libraries and the local `src/` package.
+If uv is unavailable, `requirements.txt` remains a pip-compatible fallback that installs the third-party libraries and local `src/` package.
 
 ## Run
 
@@ -159,28 +174,90 @@ bash scripts/run_pipeline.sh --full-azure --azure-clusters 8
 
 The Azure path is the GenAI embedding implementation. The local path creates classical TF-IDF/SVD vectors for reproducibility; it is not an LLM embedding model.
 
-Manual module commands after activating the virtual environment:
+Manual module commands with uv:
 
 ```bash
-python -m sms_spam_ham_analysis.data --input data/raw --output outputs/validated_sms_dataset.csv
-python -m sms_spam_ham_analysis.analysis --dataset outputs/validated_sms_dataset.csv
-python -m sms_spam_ham_analysis.modeling --dataset outputs/validated_sms_dataset.csv --model-out outputs/models/tfidf_classifier.joblib
-python -m sms_spam_ham_analysis.clustering --dataset outputs/validated_sms_dataset.csv --clusters auto
-python -m sms_spam_ham_analysis.visualize --outputs outputs
+uv run --frozen python -m sms_spam_ham_analysis.data --input data/raw --output outputs/validated_sms_dataset.csv
+uv run --frozen python -m sms_spam_ham_analysis.analysis --dataset outputs/validated_sms_dataset.csv
+uv run --frozen python -m sms_spam_ham_analysis.modeling --dataset outputs/validated_sms_dataset.csv --model-out outputs/models/tfidf_classifier.joblib
+uv run --frozen python -m sms_spam_ham_analysis.clustering --dataset outputs/validated_sms_dataset.csv --clusters auto
+uv run --frozen python -m sms_spam_ham_analysis.visualize --outputs outputs
 ```
 
 Try the trained classifier on a message (the local pipeline must have been run first):
 
-```bash
-python -m sms_spam_ham_analysis.predict "Congratulations, claim your free prize now"
+```powershell
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win" # Windows only; reuse the value set during setup
+uv run --frozen python -m sms_spam_ham_analysis.predict "Congratulations, claim your free prize now"
 ```
 
-The command prints the predicted `HAM`/`SPAM` label and the classifier's confidence.
+The command prints the predicted `HAM`/`SPAM` label and the classifier's confidence. On the current trained artifact, this example is classified as `SPAM` with 94.3% confidence.
+
+### Prediction API
+
+Start the typed HTTP service after training the local model:
+
+```powershell
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win" # Windows only
+uv run --frozen python -m sms_spam_ham_analysis.api
+```
+
+```bash
+uv run --frozen python -m sms_spam_ham_analysis.api
+```
+
+Submit a new message from another terminal:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/predict `
+  -ContentType "application/json" `
+  -Body '{"text":"Congratulations, claim your free prize now"}'
+```
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Congratulations, claim your free prize now"}'
+```
+
+Response:
+
+```json
+{"label":"spam","confidence":0.943}
+```
+
+Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. `GET /health/live` reports process health, while `GET /health/ready` returns success only when the configured model artifact is loadable. Request logs include request ID, route, status, and latency but never SMS content.
+
+The API uses `outputs/models/tfidf_classifier.joblib` by default. Set `SMS_SPAM_MODEL_PATH` to an alternative trusted artifact path before startup when needed.
+
+### Docker
+
+Build the non-root API image:
+
+```bash
+docker build -t sms-spam-api .
+```
+
+Run it with the locally trained model mounted read-only:
+
+```powershell
+docker run --rm -p 8000:8000 `
+  --mount "type=bind,source=$PWD\outputs\models,target=/models,readonly" `
+  sms-spam-api
+```
+
+```bash
+docker run --rm -p 8000:8000 \
+  --mount type=bind,source="$(pwd)/outputs/models",target=/models,readonly \
+  sms-spam-api
+```
+
+The model is intentionally not baked into the image. `joblib` deserialization can execute Python code, so mount only artifacts produced by a trusted training pipeline.
 
 If the dataset has not been downloaded yet, run:
 
 ```bash
-python -m sms_spam_ham_analysis.download_data
+uv run --frozen python -m sms_spam_ham_analysis.download_data
 ```
 
 ## Azure Embeddings
@@ -209,12 +286,16 @@ Important generated files:
 
 ## Architecture
 
+See the [prediction service architecture](docs/architecture.md) and [serving decision record](docs/adr/0001-serve-the-existing-model-through-a-thin-api.md) for the runtime diagram, health semantics, privacy boundaries, and deliberately excluded production infrastructure.
+
 - `data.py`: raw-file discovery, format checks, label/text validation, duplicate reporting, and normalized CSV output.
 - `analysis.py`: frequent words, spam-vs-legitimate vocabulary differences, and n-grams.
 - `model.py` and `modeling.py`: TF-IDF representation, Logistic Regression, deterministic evaluation, duplicate-safe grouped evaluation, metrics, and error examples.
 - `embeddings.py`: local TF-IDF/SVD embeddings and optional Azure embedding API integration with batching, retries, concurrency, and fail-fast config validation.
 - `clustering.py`: KMeans clustering over embedding vectors, cluster summaries, provider-specific output folders, and silhouette diagnostics.
 - `visualize.py`: compact figures, artifact index, and provider comparison.
+- `predict.py`: shared cached artifact loading and confidence-based single-message prediction used by both CLI and API.
+- `api.py`: typed FastAPI contracts, liveness/readiness checks, request IDs, privacy-safe structured logs, and HTTP error mapping.
 
 ## Engineering Decisions
 
@@ -223,23 +304,27 @@ Important generated files:
 - **Keep the default workflow local.** TF-IDF/SVD clustering makes the full pipeline runnable without credentials, network calls, or per-request cost. Azure embeddings remain an explicit opt-in path for comparing semantic representations.
 - **Treat errors as deliverables.** Aggregate metrics are paired with a confusion matrix and exported misclassifications so reviewers can examine failure modes—especially spam false negatives—rather than relying on accuracy alone.
 - **Separate generated artifacts by provider.** Local and Azure clustering outputs retain their own metadata and summaries, making comparisons traceable without silently overwriting the provenance of a result.
+- **Keep serving thin and stateless.** FastAPI adapts the shared prediction function instead of reimplementing model behavior; the trusted model is mounted separately so application and artifact releases remain independent.
 
 ## Verification
 
 Run the automated smoke tests without the real dataset:
 
 ```powershell
-.\.venv-win\Scripts\Activate.ps1
-python -m unittest discover -s tests
-python -m compileall -q src
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win"
+uv sync --locked
+uv run --frozen coverage run --branch -m unittest discover -s tests
+uv run --frozen coverage report --include="src/sms_spam_ham_analysis/api.py,src/sms_spam_ham_analysis/predict.py" --fail-under=85
+uv run --frozen python -m compileall -q src
 ```
 
 Linux or WSL:
 
 ```bash
-source .venv/bin/activate
-python -m unittest discover -s tests
-python -m compileall -q src
+uv sync --locked
+uv run --frozen coverage run --branch -m unittest discover -s tests
+uv run --frozen coverage report --include="src/sms_spam_ham_analysis/api.py,src/sms_spam_ham_analysis/predict.py" --fail-under=85
+uv run --frozen python -m compileall -q src
 ```
 
 ## Limitations
@@ -248,4 +333,4 @@ python -m compileall -q src
 - The classifier is a strong baseline, not a production spam filter.
 - Clustering is exploratory. Silhouette score is a useful separation diagnostic, but provider choice should also consider representative messages, label mix, business usefulness, cost, privacy, and reproducibility.
 - Azure embeddings require approved data handling, credentials, and cost awareness.
-- A production version would add Docker, monitoring, retraining strategy, threshold tuning, and a serving/integration path.
+- The API is a portfolio reference service, not an internet-hardened spam gateway; production still needs authenticated TLS ingress, rate limiting, metrics/alerting, deployment automation, a model registry, monitored retraining, and threshold governance.

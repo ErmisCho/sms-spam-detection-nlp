@@ -7,11 +7,14 @@ Use this checklist before pushing the project to a public GitHub repository.
 - `README.md`
 - `requirements.txt`
 - `pyproject.toml`
+- `uv.lock`
 - `.env.example`
+- `Dockerfile` and `.dockerignore`
 - `src/`
 - `scripts/`
 - `tests/`
 - `docs/project_notes.md`
+- `docs/architecture.md` and `docs/adr/`
 - `docs/publishing_checklist.md`
 - `data/raw/.gitkeep`
 - selected generated summaries and figures from `outputs/`, if desired:
@@ -46,8 +49,11 @@ Use this checklist before pushing the project to a public GitHub repository.
 3. Run:
 
 ```bash
-python -m unittest discover -s tests
-python -m compileall -q src
+uv sync --locked
+uv run --frozen coverage run --branch -m unittest discover -s tests
+uv run --frozen coverage report --include="src/sms_spam_ham_analysis/api.py,src/sms_spam_ham_analysis/predict.py" --fail-under=85
+uv run --frozen python -m compileall -q src
+docker build -t sms-spam-api:portfolio .
 ```
 
 4. Inspect tracked files:

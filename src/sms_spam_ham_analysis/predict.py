@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,14 @@ class PredictionError(ValueError):
     """Raised when a local prediction cannot be completed."""
 
 
+class InvalidMessageError(PredictionError):
+    """Raised when an SMS cannot be classified because its input is invalid."""
+
+
+class ModelUnavailableError(PredictionError):
+    """Raised when the trained classifier artifact is absent or unusable."""
+
+
 @dataclass(frozen=True)
 class Prediction:
     label: str
@@ -24,24 +33,61 @@ class Prediction:
 
 
 def predict_message(text: str, *, model_path: Path = TFIDF_MODEL_PATH) -> Prediction:
-    """Load a trained artifact and predict one SMS label with confidence."""
+    """Load the cached trained artifact and predict one SMS label with confidence."""
 
     if not text.strip():
-        raise PredictionError("SMS text must not be empty.")
-    if not model_path.is_file():
-        raise PredictionError(
-            f"Trained model not found at {model_path}. "
-            "Run the modeling step first: python -m sms_spam_ham_analysis.modeling"
-        )
+        raise InvalidMessageError("SMS text must not be empty.")
 
-    artifact: Any = joblib.load(model_path)
+    pipeline = load_pipeline(model_path)
+    try:
+        label = str(pipeline.predict([text])[0])
+        confidence = _prediction_confidence(pipeline, text, label)
+    except PredictionError:
+        raise
+    except Exception as exc:
+        raise PredictionError("The classifier could not produce a prediction.") from exc
+    return Prediction(label=label, confidence=confidence)
+
+
+def load_pipeline(model_path: Path = TFIDF_MODEL_PATH) -> Any:
+    """Load and validate a model artifact, cached by path and file identity."""
+
+    path = model_path.expanduser().resolve()
+    try:
+        stat = path.stat()
+    except FileNotFoundError as exc:
+        raise ModelUnavailableError(
+            f"Trained model not found at {path}. "
+            "Run the modeling step first: python -m sms_spam_ham_analysis.modeling"
+        ) from exc
+    except OSError as exc:
+        raise ModelUnavailableError(f"Trained model is not readable at {path}.") from exc
+
+    if not path.is_file():
+        raise ModelUnavailableError(f"Trained model path is not a file: {path}.")
+    return _load_pipeline_cached(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@lru_cache(maxsize=4)
+def _load_pipeline_cached(path: str, modified_ns: int, size: int) -> Any:
+    del modified_ns, size
+    try:
+        artifact: Any = joblib.load(path)
+    except Exception as exc:
+        raise ModelUnavailableError(f"Unable to load trained model artifact at {path}.") from exc
+
     pipeline = artifact.get("pipeline") if isinstance(artifact, dict) else artifact
     if pipeline is None or not hasattr(pipeline, "predict"):
-        raise PredictionError(f"Invalid model artifact at {model_path}: classifier pipeline is missing.")
+        raise ModelUnavailableError(f"Invalid model artifact at {path}: classifier pipeline is missing.")
+    if not hasattr(pipeline, "predict_proba") or not hasattr(pipeline, "classes_"):
+        raise ModelUnavailableError(f"Invalid model artifact at {path}: probability metadata is missing.")
+    return pipeline
 
-    label = str(pipeline.predict([text])[0])
-    confidence = _prediction_confidence(pipeline, text, label)
-    return Prediction(label=label, confidence=confidence)
+
+def clear_model_cache() -> None:
+    """Clear cached artifacts, primarily for model replacement and deterministic tests."""
+
+    _load_pipeline_cached.cache_clear()
 
 
 def _prediction_confidence(pipeline: Any, text: str, label: str) -> float:
