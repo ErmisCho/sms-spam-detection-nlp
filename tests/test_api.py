@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import httpx
 import joblib
+from starlette.requests import Request
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,9 +26,11 @@ from sms_spam_ham_analysis.api import (
     JsonFormatter,
     LOGGER,
     SlidingWindowRateLimiter,
+    _boolean_env,
     _content_length,
     _positive_float_env,
     _positive_int_env,
+    _rate_limit_client,
     create_app,
 )
 from sms_spam_ham_analysis.model import build_tfidf_classifier
@@ -260,6 +263,30 @@ class PredictionApiTest(unittest.TestCase):
         self.assertGreaterEqual(int(limited.headers["Retry-After"]), 1)
         self.assertEqual(health.status_code, 200)
 
+    def test_uses_only_azure_appended_forwarded_ip_for_rate_limit(self) -> None:
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/predict",
+            "headers": [(b"x-forwarded-for", b"192.0.2.1, 203.0.113.10")],
+            "client": ("10.0.0.5", 4321),
+        }
+        request = Request(scope)
+
+        self.assertEqual(
+            _rate_limit_client(request, trust_x_forwarded_for=True), "203.0.113.10"
+        )
+        self.assertEqual(
+            _rate_limit_client(request, trust_x_forwarded_for=False), "10.0.0.5"
+        )
+
+        invalid_scope = dict(scope)
+        invalid_scope["headers"] = [(b"x-forwarded-for", b"spoofed, not-an-ip")]
+        self.assertEqual(
+            _rate_limit_client(Request(invalid_scope), trust_x_forwarded_for=True),
+            "10.0.0.5",
+        )
+
     def test_times_out_slow_prediction_without_leaking_details(self) -> None:
         client = ApiClient(
             create_app(model_path=self.model_path, request_timeout_seconds=0.005)
@@ -312,6 +339,8 @@ class PredictionApiTest(unittest.TestCase):
                 "INVALID_INT": "many",
                 "VALID_FLOAT": "0.25",
                 "INVALID_FLOAT": "slow",
+                "VALID_BOOL": "true",
+                "INVALID_BOOL": "sometimes",
             },
             clear=False,
         ):
@@ -320,6 +349,8 @@ class PredictionApiTest(unittest.TestCase):
             self.assertEqual(_positive_int_env("INVALID_INT", 3), 3)
             self.assertEqual(_positive_float_env("VALID_FLOAT", 1.0), 0.25)
             self.assertEqual(_positive_float_env("INVALID_FLOAT", 1.0), 1.0)
+            self.assertTrue(_boolean_env("VALID_BOOL", False))
+            self.assertFalse(_boolean_env("INVALID_BOOL", False))
 
 
 if __name__ == "__main__":
