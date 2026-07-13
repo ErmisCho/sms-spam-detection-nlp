@@ -142,8 +142,42 @@ class PredictionApiTest(unittest.TestCase):
         schema = self.client.get("/openapi.json").json()
 
         self.assertIn("/predict", schema["paths"])
+        self.assertIn("/api/v1/predict", schema["paths"])
+        self.assertTrue(schema["paths"]["/predict"]["post"]["deprecated"])
         self.assertIn("PredictionRequest", schema["components"]["schemas"])
         self.assertIn("PredictionResponse", schema["components"]["schemas"])
+
+    def test_versioned_prediction_route_matches_legacy_contract(self) -> None:
+        payload = {"text": "claim free cash prize now"}
+
+        versioned = self.client.post("/api/v1/predict", json=payload)
+        legacy = self.client.post("/predict", json=payload)
+
+        self.assertEqual(versioned.status_code, 200)
+        self.assertEqual(versioned.json(), legacy.json())
+
+    def test_serves_compiled_frontend_without_shadowing_api_docs(self) -> None:
+        frontend_dist = self.root / "frontend"
+        assets = frontend_dist / "assets"
+        assets.mkdir(parents=True)
+        (frontend_dist / "index.html").write_text(
+            '<!doctype html><div id="root">MessageGuard</div>', encoding="utf-8"
+        )
+        (assets / "app.js").write_text("console.log('demo')", encoding="utf-8")
+        client = ApiClient(create_app(model_path=self.model_path, frontend_dist=frontend_dist))
+
+        home = client.get("/")
+        asset = client.get("/assets/app.js")
+        docs = client.get("/docs")
+        prediction = client.post("/api/v1/predict", json={"text": "team meeting tomorrow"})
+        client.close()
+
+        self.assertEqual(home.status_code, 200)
+        self.assertIn("MessageGuard", home.text)
+        self.assertEqual(asset.status_code, 200)
+        self.assertIn("console.log", asset.text)
+        self.assertEqual(docs.status_code, 200)
+        self.assertEqual(prediction.status_code, 200)
 
     def test_request_logs_are_structured_and_do_not_capture_sms_text(self) -> None:
         stream = io.StringIO()

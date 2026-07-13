@@ -13,7 +13,8 @@ from typing import Literal
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from sms_spam_ham_analysis.config import TFIDF_MODEL_PATH
@@ -28,6 +29,7 @@ from sms_spam_ham_analysis.predict import (
 
 LOGGER = logging.getLogger("sms_spam_ham_analysis.api")
 MODEL_PATH_ENV = "SMS_SPAM_MODEL_PATH"
+FRONTEND_DIST_ENV = "SMS_SPAM_FRONTEND_DIST"
 REQUEST_ID_HEADER = "X-Request-ID"
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
@@ -75,7 +77,7 @@ class ReadinessResponse(BaseModel):
     status: Literal["ready", "not_ready"]
 
 
-def create_app(*, model_path: Path | None = None) -> FastAPI:
+def create_app(*, model_path: Path | None = None, frontend_dist: Path | None = None) -> FastAPI:
     """Create an application with an explicit, testable model artifact path."""
 
     resolved_model_path = model_path or Path(os.getenv(MODEL_PATH_ENV, str(TFIDF_MODEL_PATH)))
@@ -85,6 +87,9 @@ def create_app(*, model_path: Path | None = None) -> FastAPI:
         description="Classify an SMS as HAM or SPAM with a trained TF-IDF model.",
     )
     application.state.model_path = resolved_model_path
+    application.state.frontend_dist = frontend_dist or Path(
+        os.getenv(FRONTEND_DIST_ENV, "frontend/dist")
+    )
 
     @application.middleware("http")
     async def request_observability(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -127,7 +132,19 @@ def create_app(*, model_path: Path | None = None) -> FastAPI:
             return ReadinessResponse(status="ready")
         return JSONResponse(status_code=503, content={"status": "not_ready"})
 
-    @application.post("/predict", response_model=PredictionResponse, tags=["prediction"])
+    @application.post(
+        "/predict",
+        response_model=PredictionResponse,
+        tags=["prediction"],
+        deprecated=True,
+        summary="Classify an SMS (legacy route)",
+    )
+    @application.post(
+        "/api/v1/predict",
+        response_model=PredictionResponse,
+        tags=["prediction"],
+        summary="Classify an SMS",
+    )
     async def predict(payload: PredictionRequest) -> PredictionResponse | JSONResponse:
         try:
             result = predict_message(payload.text, model_path=application.state.model_path)
@@ -139,6 +156,7 @@ def create_app(*, model_path: Path | None = None) -> FastAPI:
             return JSONResponse(status_code=500, content={"detail": "Prediction failed."})
         return PredictionResponse(label=result.label, confidence=result.confidence)
 
+    _mount_frontend(application, application.state.frontend_dist)
     return application
 
 
@@ -166,6 +184,21 @@ def _model_is_ready(model_path: Path) -> bool:
     except PredictionError:
         return False
     return True
+
+
+def _mount_frontend(application: FastAPI, frontend_dist: Path) -> None:
+    """Serve the compiled product demo when its build artifacts are present."""
+
+    index_path = frontend_dist / "index.html"
+    assets_path = frontend_dist / "assets"
+    if not index_path.is_file() or not assets_path.is_dir():
+        return
+
+    application.mount("/assets", StaticFiles(directory=assets_path), name="frontend-assets")
+
+    @application.get("/", include_in_schema=False)
+    async def product_demo() -> FileResponse:
+        return FileResponse(index_path)
 
 
 def main() -> None:
