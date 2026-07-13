@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:0.11.21 AS uv
 
-FROM node:20.20-alpine AS frontend
+FROM node:26.5-alpine AS frontend
 
 WORKDIR /frontend
 
