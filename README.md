@@ -6,7 +6,7 @@
 
 ![SMS Spam Detection portfolio project](docs/assets/github-social-preview.jpg)
 
-Classify a new SMS as legitimate or spam, return a confidence score, and serve the result through a tested API. This independent portfolio project shows the complete path from raw data to a reproducible, containerized ML service—not only a notebook or model score.
+Classify a new SMS as legitimate or spam, return a confidence score, and explore the result through a polished browser interface. This independent portfolio project shows the complete path from raw data to a reproducible, containerized full-stack ML service—not only a notebook or model score.
 
 [See it work](#see-it-work) · [Review the results](#results-at-a-glance) · [Run it locally](#setup) · [Use the API](#prediction-api) · [View the architecture](docs/architecture.md)
 
@@ -15,25 +15,18 @@ Classify a new SMS as legitimate or spam, return a confidence score, and serve t
 | Question | Answer |
 | --- | --- |
 | What problem does it solve? | Flags suspicious SMS messages while keeping prediction confidence visible. |
-| What does it deliver? | Reproducible training pipeline, CLI, FastAPI service, Docker image, tests, reports, and diagrams. |
+| What does it deliver? | React/TypeScript demo, reproducible training pipeline, CLI, versioned FastAPI service, Docker image, tests, reports, and diagrams. |
 | How well does it work? | 94.16% duplicate-safe SPAM F1; the conventional split produced only 13 errors across 1,115 test messages. |
 | Can it run without cloud services? | Yes. The complete default path is local, private, and requires no API key. |
 | What makes the evaluation credible? | Exact duplicate messages are kept out of both train and test, eliminating text overlap in the stricter evaluation. |
 
 ## See It Work
 
-Give the trained model a new SMS message:
+![MessageGuard browser interface classifying a suspicious SMS as spam with 97.5 percent confidence](docs/assets/messageguard-demo.png)
 
-> Congratulations, claim your free prize now
+The responsive MessageGuard interface sends a new SMS to the same tested prediction function used by the CLI and API. It displays the HAM/SPAM label, confidence, round-trip latency, model readiness, and actionable error states without storing message content in application logs.
 
-It returns:
-
-```text
-Prediction: SPAM
-Confidence: 94.3%
-```
-
-The same prediction is available from the CLI, interactive OpenAPI page, or containerized HTTP API.
+The same prediction contract remains available through the CLI and interactive OpenAPI page for technical reviewers.
 
 ```mermaid
 flowchart LR
@@ -56,7 +49,7 @@ The duplicate-safe result is the preferred estimate because it prevents identica
 
 ## Why It Stands Out
 
-- **Usable software, not only analysis:** a typed FastAPI service, OpenAPI contract, CLI, non-root Docker image, and readiness checks make the model practical to integrate.
+- **Usable software, not only analysis:** a responsive React/TypeScript product interface, typed FastAPI service, OpenAPI contract, CLI, non-root Docker image, and readiness checks make the model practical to evaluate and integrate.
 - **Honest evaluation:** duplicate-safe testing exposes leakage instead of presenting the most flattering number.
 - **Reviewable failure modes:** confusion matrices and exported false positives/negatives show where the classifier is wrong.
 - **Reproducible by default:** uv lockfile, Python 3.10–3.13 CI, deterministic tests, and a fully local path require no secrets.
@@ -211,6 +204,29 @@ uv run --frozen python -m sms_spam_ham_analysis.predict "Congratulations, claim 
 
 The command prints the predicted `HAM`/`SPAM` label and the classifier's confidence. On the current trained artifact, this example is classified as `SPAM` with 94.3% confidence.
 
+#### Browser Demo
+
+Build the locked React/TypeScript frontend, then start FastAPI from the repository root:
+
+```powershell
+Set-Location frontend
+npm ci
+npm run build
+Set-Location ..
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win"
+uv run --frozen python -m sms_spam_ham_analysis.api
+```
+
+```bash
+cd frontend
+npm ci
+npm run build
+cd ..
+uv run --frozen python -m sms_spam_ham_analysis.api
+```
+
+Open `http://127.0.0.1:8000` for the product interface. During frontend development, run `npm run dev` inside `frontend/`; Vite serves `http://127.0.0.1:5173` and proxies `/api` and `/health` to FastAPI on port 8000, so development and production both use same-origin requests.
+
 #### Prediction API
 
 Start the typed HTTP service after training the local model:
@@ -227,13 +243,13 @@ uv run --frozen python -m sms_spam_ham_analysis.api
 Submit a new message from another terminal:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/predict `
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/predict `
   -ContentType "application/json" `
   -Body '{"text":"Congratulations, claim your free prize now"}'
 ```
 
 ```bash
-curl -X POST http://127.0.0.1:8000/predict \
+curl -X POST http://127.0.0.1:8000/api/v1/predict \
   -H 'Content-Type: application/json' \
   -d '{"text":"Congratulations, claim your free prize now"}'
 ```
@@ -244,13 +260,13 @@ Response:
 {"label":"spam","confidence":0.943}
 ```
 
-Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. `GET /health/live` reports process health, while `GET /health/ready` returns success only when the configured model artifact is loadable. Request logs include request ID, route, status, and latency but never SMS content.
+Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`. `POST /predict` remains as a deprecated compatibility alias for existing clients. `GET /health/live` reports process health, while `GET /health/ready` returns success only when the configured model artifact is loadable. Request logs include request ID, route, status, and latency but never SMS content.
 
 The API uses `outputs/models/tfidf_classifier.joblib` by default. Set `SMS_SPAM_MODEL_PATH` to an alternative trusted artifact path before startup when needed.
 
 #### Docker
 
-Build the non-root API image:
+Build the non-root full-stack image. Its first stage compiles the locked frontend; the runtime stage contains FastAPI and the static browser assets:
 
 ```bash
 docker build -t sms-spam-api .
@@ -271,6 +287,8 @@ docker run --rm -p 8000:8000 \
 ```
 
 The model is intentionally not baked into the image. `joblib` deserialization can execute Python code, so mount only artifacts produced by a trusted training pipeline.
+
+Open `http://127.0.0.1:8000` for the browser demo or `http://127.0.0.1:8000/docs` for OpenAPI after the container becomes ready.
 
 If the dataset has not been downloaded yet, run:
 
@@ -313,7 +331,8 @@ See the [prediction service architecture](docs/architecture.md) and [serving dec
 - `clustering.py`: KMeans clustering over embedding vectors, cluster summaries, provider-specific output folders, and silhouette diagnostics.
 - `visualize.py`: compact figures, artifact index, and provider comparison.
 - `predict.py`: shared cached artifact loading and confidence-based single-message prediction used by both CLI and API.
-- `api.py`: typed FastAPI contracts, liveness/readiness checks, request IDs, privacy-safe structured logs, and HTTP error mapping.
+- `api.py`: versioned FastAPI contracts, static frontend serving, liveness/readiness checks, request IDs, privacy-safe structured logs, and HTTP error mapping.
+- `frontend/`: focused React/TypeScript interface, typed API client, responsive and accessible interaction states, component tests, and a Vite production build.
 
 ### Engineering Decisions
 
@@ -323,6 +342,7 @@ See the [prediction service architecture](docs/architecture.md) and [serving dec
 - **Treat errors as deliverables.** Aggregate metrics are paired with a confusion matrix and exported misclassifications so reviewers can examine failure modes—especially spam false negatives—rather than relying on accuracy alone.
 - **Separate generated artifacts by provider.** Local and Azure clustering outputs retain their own metadata and summaries, making comparisons traceable without silently overwriting the provenance of a result.
 - **Keep serving thin and stateless.** FastAPI adapts the shared prediction function instead of reimplementing model behavior; the trusted model is mounted separately so application and artifact releases remain independent.
+- **Use one origin in production.** FastAPI serves the compiled React assets and the versioned API from one container. Vite proxies the same relative routes during development, avoiding environment-specific CORS configuration while keeping frontend and backend source boundaries clear.
 
 ### Verification
 
@@ -335,6 +355,15 @@ uv run --frozen coverage run --branch -m unittest discover -s tests
 uv run --frozen coverage report --include="src/sms_spam_ham_analysis/api.py,src/sms_spam_ham_analysis/predict.py" --fail-under=85
 uv run --frozen python -m compileall -q src
 ```
+
+Verify the frontend from `frontend/` on either platform:
+
+```bash
+npm ci
+npm run check
+```
+
+`npm run check` runs the interaction tests, TypeScript compiler, and optimized Vite build. CI performs these checks independently of the Python 3.10–3.13 matrix and also builds the complete multi-stage Docker image.
 
 Linux or WSL:
 
