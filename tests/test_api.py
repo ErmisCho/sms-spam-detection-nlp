@@ -4,11 +4,14 @@ import asyncio
 import io
 import json
 import logging
+import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import httpx
 import joblib
@@ -17,7 +20,16 @@ import joblib
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from sms_spam_ham_analysis.api import JsonFormatter, LOGGER, create_app
+from sms_spam_ham_analysis import api as api_module
+from sms_spam_ham_analysis.api import (
+    JsonFormatter,
+    LOGGER,
+    SlidingWindowRateLimiter,
+    _content_length,
+    _positive_float_env,
+    _positive_int_env,
+    create_app,
+)
 from sms_spam_ham_analysis.model import build_tfidf_classifier
 from sms_spam_ham_analysis.predict import clear_model_cache
 
@@ -209,6 +221,105 @@ class PredictionApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(response.headers["X-Request-ID"], "invalid id with spaces")
         self.assertRegex(response.headers["X-Request-ID"], r"^[a-f0-9]{32}$")
+
+    def test_rejects_oversized_prediction_body_before_parsing(self) -> None:
+        client = ApiClient(create_app(model_path=self.model_path, max_request_bytes=32))
+
+        response = client.post(
+            "/api/v1/predict",
+            content=b"x" * 33,
+            headers={"content-type": "application/json", "content-length": "33"},
+        )
+        client.close()
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.json(), {"detail": "Request body is too large."})
+        self.assertRegex(response.headers["X-Request-ID"], r"^[a-f0-9]{32}$")
+
+    def test_limits_prediction_requests_per_client_without_limiting_health(self) -> None:
+        client = ApiClient(
+            create_app(
+                model_path=self.model_path,
+                rate_limit_requests=2,
+                rate_limit_window_seconds=60,
+            )
+        )
+        payload = {"text": "claim free cash prize now"}
+
+        self.assertEqual(client.post("/api/v1/predict", json=payload).status_code, 200)
+        self.assertEqual(client.post("/api/v1/predict", json=payload).status_code, 200)
+        limited = client.post("/api/v1/predict", json=payload)
+        health = client.get("/health/ready")
+        client.close()
+
+        self.assertEqual(limited.status_code, 429)
+        self.assertEqual(
+            limited.json(), {"detail": "Request limit exceeded. Try again later."}
+        )
+        self.assertEqual(limited.headers["X-RateLimit-Limit"], "2")
+        self.assertGreaterEqual(int(limited.headers["Retry-After"]), 1)
+        self.assertEqual(health.status_code, 200)
+
+    def test_times_out_slow_prediction_without_leaking_details(self) -> None:
+        client = ApiClient(
+            create_app(model_path=self.model_path, request_timeout_seconds=0.005)
+        )
+
+        with patch("sms_spam_ham_analysis.api.predict_message") as mocked_prediction:
+            mocked_prediction.side_effect = lambda *args, **kwargs: time.sleep(0.05)
+            response = client.post(
+                "/api/v1/predict", json={"text": "PRIVATE SLOW MESSAGE"}
+            )
+        client.close()
+
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(response.json(), {"detail": "Prediction request timed out."})
+        self.assertNotIn("PRIVATE SLOW MESSAGE", response.text)
+
+    def test_rate_limiter_expires_requests_and_bounds_client_tracking(self) -> None:
+        limiter = SlidingWindowRateLimiter(requests=2, window_seconds=10)
+
+        self.assertEqual(limiter.check("client-a", now=0), (True, 0))
+        self.assertEqual(limiter.check("client-a", now=1), (True, 0))
+        allowed, retry_after = limiter.check("client-a", now=2)
+        self.assertFalse(allowed)
+        self.assertEqual(retry_after, 8)
+        self.assertEqual(limiter.check("client-a", now=11), (True, 0))
+
+        with patch.object(api_module, "MAX_TRACKED_RATE_LIMIT_CLIENTS", 2):
+            bounded = SlidingWindowRateLimiter(requests=1, window_seconds=10)
+            self.assertEqual(bounded.check("old-a", now=0), (True, 0))
+            self.assertEqual(bounded.check("old-b", now=0), (True, 0))
+            self.assertEqual(bounded.check("new", now=11), (True, 0))
+            self.assertNotIn("old-a", bounded._requests_by_client)
+
+            full = SlidingWindowRateLimiter(requests=1, window_seconds=10)
+            self.assertEqual(full.check("active-a", now=0), (True, 0))
+            self.assertEqual(full.check("active-b", now=0), (True, 0))
+            self.assertEqual(full.check("third", now=1), (True, 0))
+            self.assertIn("overflow", full._requests_by_client)
+
+    def test_request_limit_configuration_uses_safe_fallbacks(self) -> None:
+        self.assertIsNone(_content_length(None))
+        self.assertIsNone(_content_length("not-a-number"))
+        self.assertEqual(_content_length("-1"), 0)
+
+        with patch.dict(
+            os.environ,
+            {
+                "VALID_INT": "7",
+                "ZERO_INT": "0",
+                "INVALID_INT": "many",
+                "VALID_FLOAT": "0.25",
+                "INVALID_FLOAT": "slow",
+            },
+            clear=False,
+        ):
+            self.assertEqual(_positive_int_env("VALID_INT", 3), 7)
+            self.assertEqual(_positive_int_env("ZERO_INT", 3), 3)
+            self.assertEqual(_positive_int_env("INVALID_INT", 3), 3)
+            self.assertEqual(_positive_float_env("VALID_FLOAT", 1.0), 0.25)
+            self.assertEqual(_positive_float_env("INVALID_FLOAT", 1.0), 1.0)
 
 
 if __name__ == "__main__":

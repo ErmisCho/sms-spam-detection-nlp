@@ -8,7 +8,7 @@
 
 Classify a new SMS as legitimate or spam, return a confidence score, and explore the result through a polished browser interface. This independent portfolio project shows the complete path from raw data to a reproducible, containerized full-stack ML service—not only a notebook or model score.
 
-[See it work](#see-it-work) · [Review the results](#results-at-a-glance) · [Run it locally](#setup) · [Use the API](#prediction-api) · [View the architecture](docs/architecture.md)
+[See it work](#see-it-work) · [Review the results](#results-at-a-glance) · [Run it locally](#setup) · [Use the API](#prediction-api) · [Deploy to Azure](#azure-container-apps-deployment) · [View the architecture](docs/architecture.md)
 
 ## At a Glance
 
@@ -18,6 +18,7 @@ Classify a new SMS as legitimate or spam, return a confidence score, and explore
 | What does it deliver? | React/TypeScript demo, reproducible training pipeline, CLI, versioned FastAPI service, Docker image, tests, reports, and diagrams. |
 | How well does it work? | 94.16% duplicate-safe SPAM F1; the conventional split produced only 13 errors across 1,115 test messages. |
 | Can it run without cloud services? | Yes. The complete default path is local, private, and requires no API key. |
+| Can it be hosted for interviews? | Yes. The repository includes a storage-free image, immutable GHCR releases, and scale-to-zero Azure Container Apps IaC with cost safeguards and teardown automation. |
 | What makes the evaluation credible? | Exact duplicate messages are kept out of both train and test, eliminating text overlap in the stricter evaluation. |
 
 ## See It Work
@@ -272,21 +273,29 @@ Build the non-root full-stack image. Its first stage compiles the locked fronten
 docker build -t sms-spam-api .
 ```
 
-Run it with the locally trained model mounted read-only:
+Run the self-contained image with no volume. It builds a small, fixed synthetic model inside the trusted image build so the product demonstration needs no storage account or downloaded pickle:
+
+```bash
+docker run --rm -p 8000:8000 sms-spam-api
+```
+
+To exercise the UCI-trained evaluation model instead, mount only the artifact created by this repository and explicitly select it:
 
 ```powershell
 docker run --rm -p 8000:8000 `
   --mount "type=bind,source=$PWD\outputs\models,target=/models,readonly" `
+  --env SMS_SPAM_MODEL_PATH=/models/tfidf_classifier.joblib `
   sms-spam-api
 ```
 
 ```bash
 docker run --rm -p 8000:8000 \
   --mount type=bind,source="$(pwd)/outputs/models",target=/models,readonly \
+  --env SMS_SPAM_MODEL_PATH=/models/tfidf_classifier.joblib \
   sms-spam-api
 ```
 
-The model is intentionally not baked into the image. `joblib` deserialization can execute Python code, so mount only artifacts produced by a trusted training pipeline.
+The hosted demo model is generated from synthetic messages in `demo_model.py`; its corpus provenance and artifact checksum are verified during the image build. It is for interaction testing only and is not the model behind the reported UCI benchmark metrics. Because `joblib` deserialization can execute Python code, override it only with artifacts produced by a trusted training pipeline.
 
 Open `http://127.0.0.1:8000` for the browser demo or `http://127.0.0.1:8000/docs` for OpenAPI after the container becomes ready.
 
@@ -295,6 +304,21 @@ If the dataset has not been downloaded yet, run:
 ```bash
 uv run --frozen python -m sms_spam_ham_analysis.download_data
 ```
+
+#### Azure Container Apps Deployment
+
+The deployment path is designed for a temporary public interview demo with low idle-cost exposure:
+
+- Azure Container Apps Consumption with `minReplicas: 0` and `maxReplicas: 1`;
+- 0.25 vCPU and 0.5 GiB per active replica;
+- public immutable GHCR digests, without Azure Container Registry credentials;
+- no Azure Files, Storage account, Log Analytics workspace, custom DNS, VNet, NAT gateway, private endpoint, or Dedicated workload profile;
+- passwordless GitHub-to-Azure deployment through OIDC;
+- request limits, an optional low budget alert, resource/cost audits, temporary ingress shutdown, rollback, and confirmed resource-group teardown.
+
+This is **free-tier-oriented, not guaranteed free**. Azure pricing, free-grant eligibility, traffic, outbound data, logging changes, and abuse can still create charges. Budgets send delayed alerts and do not stop spending.
+
+Start with the [Azure deployment and operations runbook](docs/azure-operations.md), then configure the [least-privilege OIDC identity](docs/azure-oidc-setup.md). Empty, inactive Container Apps environments may be removed by Azure after an extended idle period; the Bicep definitions and immutable image digest make recreation repeatable.
 
 ### Azure Embeddings
 
@@ -322,7 +346,7 @@ Important generated files:
 
 ### Architecture
 
-See the [prediction service architecture](docs/architecture.md) and [serving decision record](docs/adr/0001-serve-the-existing-model-through-a-thin-api.md) for the runtime diagram, health semantics, privacy boundaries, and deliberately excluded production infrastructure.
+See the [prediction service architecture](docs/architecture.md), [serving decision record](docs/adr/0001-serve-the-existing-model-through-a-thin-api.md), and [Azure operations runbook](docs/azure-operations.md) for the runtime diagram, health semantics, privacy boundaries, deployment controls, and deliberately excluded production infrastructure.
 
 - `data.py`: raw-file discovery, format checks, label/text validation, duplicate reporting, and normalized CSV output.
 - `analysis.py`: frequent words, spam-vs-legitimate vocabulary differences, and n-grams.
@@ -332,7 +356,9 @@ See the [prediction service architecture](docs/architecture.md) and [serving dec
 - `visualize.py`: compact figures, artifact index, and provider comparison.
 - `predict.py`: shared cached artifact loading and confidence-based single-message prediction used by both CLI and API.
 - `api.py`: versioned FastAPI contracts, static frontend serving, liveness/readiness checks, request IDs, privacy-safe structured logs, and HTTP error mapping.
+- `demo_model.py`: deterministic synthetic-model construction plus provenance and checksum verification for the storage-free hosted demo.
 - `frontend/`: focused React/TypeScript interface, typed API client, responsive and accessible interaction states, component tests, and a Vite production build.
+- `infra/azure/`: dedicated resource-group bootstrap, scale-to-zero Container Apps resources, and optional resource-group-filtered budget alerts.
 
 ### Engineering Decisions
 
@@ -341,7 +367,8 @@ See the [prediction service architecture](docs/architecture.md) and [serving dec
 - **Keep the default workflow local.** TF-IDF/SVD clustering makes the full pipeline runnable without credentials, network calls, or per-request cost. Azure embeddings remain an explicit opt-in path for comparing semantic representations.
 - **Treat errors as deliverables.** Aggregate metrics are paired with a confusion matrix and exported misclassifications so reviewers can examine failure modes—especially spam false negatives—rather than relying on accuracy alone.
 - **Separate generated artifacts by provider.** Local and Azure clustering outputs retain their own metadata and summaries, making comparisons traceable without silently overwriting the provenance of a result.
-- **Keep serving thin and stateless.** FastAPI adapts the shared prediction function instead of reimplementing model behavior; the trusted model is mounted separately so application and artifact releases remain independent.
+- **Keep serving thin and stateless.** FastAPI adapts the shared prediction function instead of reimplementing model behavior. Local evaluation can mount the UCI-trained artifact, while the public cloud image deterministically builds and verifies a synthetic demonstration model to avoid persistent storage.
+- **Bound the public demo's cost surface.** The Azure baseline scales from zero to at most one small replica, pulls a public immutable image, persists no application logs, and excludes registry, storage, custom networking, and DNS resources. API request limits and explicit teardown reduce—but cannot eliminate—billing risk.
 - **Use one origin in production.** FastAPI serves the compiled React assets and the versioned API from one container. Vite proxies the same relative routes during development, avoiding environment-specific CORS configuration while keeping frontend and backend source boundaries clear.
 
 ### Verification
@@ -365,6 +392,8 @@ npm run check
 
 `npm run check` runs the interaction tests, TypeScript compiler, and optimized Vite build. CI performs these checks independently of the Python 3.10–3.13 matrix and also builds the complete multi-stage Docker image.
 
+CI also compiles every Bicep template without deploying it, verifies the free-tier-oriented resource contract, and smoke-tests the container without a volume. Live Azure schema validation, scale-to-zero observation, budget delivery, and billing checks still require an authenticated subscription.
+
 Linux or WSL:
 
 ```bash
@@ -380,4 +409,6 @@ uv run --frozen python -m compileall -q src
 - The classifier is a strong baseline, not a production spam filter.
 - Clustering is exploratory. Silhouette score is a useful separation diagnostic, but provider choice should also consider representative messages, label mix, business usefulness, cost, privacy, and reproducibility.
 - Azure embeddings require approved data handling, credentials, and cost awareness.
-- The API is a portfolio reference service, not an internet-hardened spam gateway; production still needs authenticated TLS ingress, rate limiting, metrics/alerting, deployment automation, a model registry, monitored retraining, and threshold governance.
+- The hosted container uses a small synthetic demonstration model; the published UCI evaluation metrics do not describe that model.
+- The API applies bounded request size, timeout, and single-process rate limits, but it remains a portfolio reference service rather than an internet-hardened spam gateway. Production still needs authenticated ingress, distributed rate limiting, metrics/alerting, a model registry, monitored retraining, and threshold governance.
+- The Azure baseline is free-tier-oriented, not guaranteed free. Budgets alert rather than cap spending, billing data is delayed, and public traffic can wake the app.

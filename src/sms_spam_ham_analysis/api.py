@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import re
+import threading
 import time
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import Literal
 
@@ -16,6 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from starlette.concurrency import run_in_threadpool
 
 from sms_spam_ham_analysis.config import TFIDF_MODEL_PATH
 from sms_spam_ham_analysis.predict import (
@@ -32,6 +36,16 @@ MODEL_PATH_ENV = "SMS_SPAM_MODEL_PATH"
 FRONTEND_DIST_ENV = "SMS_SPAM_FRONTEND_DIST"
 REQUEST_ID_HEADER = "X-Request-ID"
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+PREDICTION_PATHS = frozenset({"/predict", "/api/v1/predict"})
+MAX_REQUEST_BYTES_ENV = "SMS_SPAM_MAX_REQUEST_BYTES"
+RATE_LIMIT_REQUESTS_ENV = "SMS_SPAM_RATE_LIMIT_REQUESTS"
+RATE_LIMIT_WINDOW_ENV = "SMS_SPAM_RATE_LIMIT_WINDOW_SECONDS"
+REQUEST_TIMEOUT_ENV = "SMS_SPAM_REQUEST_TIMEOUT_SECONDS"
+DEFAULT_MAX_REQUEST_BYTES = 16_384
+DEFAULT_RATE_LIMIT_REQUESTS = 30
+DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 10.0
+MAX_TRACKED_RATE_LIMIT_CLIENTS = 4_096
 
 
 class JsonFormatter(logging.Formatter):
@@ -77,10 +91,70 @@ class ReadinessResponse(BaseModel):
     status: Literal["ready", "not_ready"]
 
 
-def create_app(*, model_path: Path | None = None, frontend_dist: Path | None = None) -> FastAPI:
+class SlidingWindowRateLimiter:
+    """Small in-process limiter suited to the single-replica portfolio service."""
+
+    def __init__(self, *, requests: int, window_seconds: int) -> None:
+        self.requests = requests
+        self.window_seconds = window_seconds
+        self._requests_by_client: dict[str, deque[float]] = {}
+        self._lock = threading.Lock()
+
+    def check(self, client: str, *, now: float | None = None) -> tuple[bool, int]:
+        current = time.monotonic() if now is None else now
+        cutoff = current - self.window_seconds
+        with self._lock:
+            if (
+                client not in self._requests_by_client
+                and len(self._requests_by_client) >= MAX_TRACKED_RATE_LIMIT_CLIENTS
+            ):
+                stale_clients = [
+                    key
+                    for key, bucket in self._requests_by_client.items()
+                    if not bucket or bucket[-1] <= cutoff
+                ]
+                for key in stale_clients:
+                    del self._requests_by_client[key]
+                if len(self._requests_by_client) >= MAX_TRACKED_RATE_LIMIT_CLIENTS:
+                    client = "overflow"
+            timestamps = self._requests_by_client.setdefault(client, deque())
+            while timestamps and timestamps[0] <= cutoff:
+                timestamps.popleft()
+            if len(timestamps) >= self.requests:
+                retry_after = max(1, int(self.window_seconds - (current - timestamps[0]) + 0.999))
+                return False, retry_after
+            timestamps.append(current)
+            return True, 0
+
+
+def create_app(
+    *,
+    model_path: Path | None = None,
+    frontend_dist: Path | None = None,
+    max_request_bytes: int | None = None,
+    rate_limit_requests: int | None = None,
+    rate_limit_window_seconds: int | None = None,
+    request_timeout_seconds: float | None = None,
+) -> FastAPI:
     """Create an application with an explicit, testable model artifact path."""
 
     resolved_model_path = model_path or Path(os.getenv(MODEL_PATH_ENV, str(TFIDF_MODEL_PATH)))
+    resolved_max_request_bytes = max_request_bytes or _positive_int_env(
+        MAX_REQUEST_BYTES_ENV, DEFAULT_MAX_REQUEST_BYTES
+    )
+    resolved_rate_limit_requests = rate_limit_requests or _positive_int_env(
+        RATE_LIMIT_REQUESTS_ENV, DEFAULT_RATE_LIMIT_REQUESTS
+    )
+    resolved_rate_limit_window = rate_limit_window_seconds or _positive_int_env(
+        RATE_LIMIT_WINDOW_ENV, DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+    )
+    resolved_request_timeout = request_timeout_seconds or _positive_float_env(
+        REQUEST_TIMEOUT_ENV, DEFAULT_REQUEST_TIMEOUT_SECONDS
+    )
+    rate_limiter = SlidingWindowRateLimiter(
+        requests=resolved_rate_limit_requests,
+        window_seconds=resolved_rate_limit_window,
+    )
     application = FastAPI(
         title="SMS Spam Detection API",
         version="0.1.0",
@@ -97,7 +171,40 @@ def create_app(*, model_path: Path | None = None, frontend_dist: Path | None = N
         started = time.perf_counter()
         status = 500
         try:
-            response = await call_next(request)
+            if request.method == "POST" and request.url.path in PREDICTION_PATHS:
+                content_length = _content_length(request.headers.get("content-length"))
+                if content_length is not None and content_length > resolved_max_request_bytes:
+                    status = 413
+                    response = JSONResponse(
+                        status_code=status,
+                        content={"detail": "Request body is too large."},
+                    )
+                else:
+                    client = request.client.host if request.client else "unknown"
+                    allowed, retry_after = rate_limiter.check(client)
+                    if not allowed:
+                        status = 429
+                        response = JSONResponse(
+                            status_code=status,
+                            content={"detail": "Request limit exceeded. Try again later."},
+                            headers={
+                                "Retry-After": str(retry_after),
+                                "X-RateLimit-Limit": str(resolved_rate_limit_requests),
+                            },
+                        )
+                    else:
+                        try:
+                            response = await asyncio.wait_for(
+                                call_next(request), timeout=resolved_request_timeout
+                            )
+                        except asyncio.TimeoutError:
+                            status = 504
+                            response = JSONResponse(
+                                status_code=status,
+                                content={"detail": "Prediction request timed out."},
+                            )
+            else:
+                response = await call_next(request)
             status = response.status_code
             response.headers[REQUEST_ID_HEADER] = request_id
             return response
@@ -147,7 +254,9 @@ def create_app(*, model_path: Path | None = None, frontend_dist: Path | None = N
     )
     async def predict(payload: PredictionRequest) -> PredictionResponse | JSONResponse:
         try:
-            result = predict_message(payload.text, model_path=application.state.model_path)
+            result = await run_in_threadpool(
+                predict_message, payload.text, model_path=application.state.model_path
+            )
         except InvalidMessageError:
             return JSONResponse(status_code=422, content={"detail": "SMS text must not be empty."})
         except ModelUnavailableError:
@@ -176,6 +285,31 @@ def _request_id(candidate: str | None) -> str:
     if candidate and REQUEST_ID_PATTERN.fullmatch(candidate):
         return candidate
     return uuid.uuid4().hex
+
+
+def _content_length(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except ValueError:
+        return None
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _positive_float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 def _model_is_ready(model_path: Path) -> bool:

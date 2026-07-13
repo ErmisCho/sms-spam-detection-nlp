@@ -20,7 +20,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PATH="/app/.venv/bin:$PATH" \
-    SMS_SPAM_MODEL_PATH=/models/tfidf_classifier.joblib \
+    SMS_SPAM_MODEL_PATH=/app/models/demo_tfidf_classifier.joblib \
     SMS_SPAM_FRONTEND_DIST=/app/frontend/dist \
     HOST=0.0.0.0 \
     PORT=8000
@@ -34,6 +34,12 @@ COPY src ./src
 COPY --from=frontend /frontend/dist ./frontend/dist
 
 RUN uv sync --locked --no-dev --no-editable \
+    && python -m sms_spam_ham_analysis.demo_model build \
+        --output /app/models/demo_tfidf_classifier.joblib \
+        --manifest /app/models/demo_model_manifest.json \
+    && python -m sms_spam_ham_analysis.demo_model verify \
+        --artifact /app/models/demo_tfidf_classifier.joblib \
+        --manifest /app/models/demo_model_manifest.json \
     && chown -R appuser:appuser /app
 
 USER appuser
