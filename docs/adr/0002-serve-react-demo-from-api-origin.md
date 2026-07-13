@@ -11,7 +11,7 @@ The typed prediction API is useful to engineers but does not give recruiters or 
 
 Build a focused React and TypeScript single page with Vite. It uses relative `/api/v1/predict` and `/health/ready` URLs. Vite proxies those paths to FastAPI during development. A Docker build stage compiles the static assets, and FastAPI serves them at `/` from the existing non-root runtime image.
 
-Keep `/docs`, health endpoints, the CLI, and the legacy `/predict` compatibility route available. Keep the model artifact outside the image and mount it read-only as described in ADR 0001.
+Keep `/docs`, health endpoints, the CLI, and the legacy `/predict` compatibility route available. Local benchmark evaluation mounts the trusted UCI artifact as described in ADR 0001; the hosted storage-free exception is described in ADR 0003.
 
 ## Consequences
 

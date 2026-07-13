@@ -1,0 +1,167 @@
+name: Publish container
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label for the image (for example, v1.2.3-rc.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-container-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  verify:
+    name: Test release candidate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.21"
+          enable-cache: true
+
+      - name: Sync locked environment
+        run: uv sync --locked --python 3.13
+
+      - name: Run tests and compile package
+        run: |
+          uv run --frozen coverage run --branch -m unittest discover -s tests
+          uv run --frozen coverage report --include="src/sms_spam_ham_analysis/api.py,src/sms_spam_ham_analysis/predict.py" --fail-under=85
+          uv run --frozen python -m compileall -q src
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run check
+
+  publish:
+    name: Smoke test and publish immutable image
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+      image: ${{ env.IMAGE_NAME }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate release version
+        id: release
+        env:
+          REQUESTED_VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+        run: |
+          if [[ ! "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Version must resemble v1.2.3 or v1.2.3-rc.1" >&2
+            exit 1
+          fi
+          echo "version=$REQUESTED_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize image name
+        id: image
+        run: echo "name=${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image with provenance labels
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --tag "$IMAGE:$VERSION" \
+            --tag "$IMAGE:sha-$GITHUB_SHA" \
+            .
+
+      - name: Smoke test container without volumes
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          container_id=$(docker run --detach --rm --publish 127.0.0.1::8000 "$IMAGE:$VERSION")
+          trap 'docker logs "$container_id"; docker stop "$container_id" >/dev/null 2>&1 || true' EXIT
+          port=$(docker port "$container_id" 8000/tcp | awk -F: '{print $NF}')
+          ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "http://127.0.0.1:$port/health/ready" >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != true ]]; then
+            echo "Container did not become ready" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error "http://127.0.0.1:$port/" | grep -q 'MessageGuard'
+          curl --fail --silent --show-error \
+            --header 'Content-Type: application/json' \
+            --data '{"text":"You have won cash prize claim now"}' \
+            "http://127.0.0.1:$port/api/v1/predict" \
+            | jq --exit-status '.label == "spam" and (.confidence >= 0.5)' >/dev/null
+
+      - name: Authenticate to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Prevent version tag replacement
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if docker manifest inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
+            echo "Refusing to replace existing image tag $IMAGE:$VERSION" >&2
+            exit 1
+          fi
+
+      - name: Push version and commit tags
+        id: publish
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          digest=$(docker image inspect "$IMAGE:$VERSION" --format '{{index .RepoDigests 0}}' | sed 's/^.*@//')
+          test -n "$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Published container"
+            echo "- Image: \`$IMAGE@$digest\`"
+            echo "- Version: \`$VERSION\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"

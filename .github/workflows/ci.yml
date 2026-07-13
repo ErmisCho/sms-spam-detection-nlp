@@ -84,3 +84,38 @@ jobs:
         run: |
           test "$(docker image inspect sms-spam-api:ci --format '{{.Config.User}}')" = "appuser"
           docker image inspect sms-spam-api:ci --format '{{json .Config.Healthcheck.Test}}' | grep -q '/health/ready'
+
+      - name: Smoke test storage-free runtime
+        run: |
+          container_id=$(docker run --detach --rm --publish 127.0.0.1::8000 sms-spam-api:ci)
+          trap 'docker logs "$container_id"; docker stop "$container_id" >/dev/null 2>&1 || true' EXIT
+          port=$(docker port "$container_id" 8000/tcp | awk -F: '{print $NF}')
+          for attempt in {1..30}; do
+            if curl --fail --silent "http://127.0.0.1:$port/health/ready" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent "http://127.0.0.1:$port/health/ready" >/dev/null
+          curl --fail --silent \
+            --header 'Content-Type: application/json' \
+            --data '{"text":"You have won cash prize claim now"}' \
+            "http://127.0.0.1:$port/api/v1/predict" \
+            | jq --exit-status '.label == "spam"' >/dev/null
+
+  infrastructure:
+    name: Azure IaC contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compile Bicep without deploying
+        run: |
+          az bicep build --file infra/azure/main.bicep --stdout >/dev/null
+          az bicep build --file infra/azure/resource-group.bicep --stdout >/dev/null
+          az bicep build --file infra/azure/budget.bicep --stdout >/dev/null
+
+      - name: Verify free-tier-oriented resource plan
+        run: python -m unittest tests.test_azure_contract
