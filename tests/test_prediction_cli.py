@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from sms_spam_ham_analysis.model import build_tfidf_classifier
-from sms_spam_ham_analysis.predict import PredictionError, main, predict_message
+from sms_spam_ham_analysis.predict import ModelUnavailableError, PredictionError, main, predict_message
 
 
 class PredictionCliTest(unittest.TestCase):
@@ -42,8 +42,16 @@ class PredictionCliTest(unittest.TestCase):
 
     def test_missing_model_error_explains_how_to_train(self) -> None:
         missing = Path("does-not-exist.joblib")
-        with self.assertRaisesRegex(PredictionError, "Run the modeling step first"):
+        with self.assertRaisesRegex(ModelUnavailableError, "Run the modeling step first"):
             predict_message("hello", model_path=missing)
+
+    def test_corrupt_model_is_reported_as_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            model_path = Path(tmp) / "classifier.joblib"
+            model_path.write_bytes(b"not a model")
+
+            with self.assertRaisesRegex(ModelUnavailableError, "Unable to load trained model artifact"):
+                predict_message("hello", model_path=model_path)
 
     def test_cli_prints_readable_prediction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
