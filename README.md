@@ -8,7 +8,7 @@
 
 Classify a new SMS as legitimate or spam, return a confidence score, and explore the result through a polished browser interface. This independent portfolio project shows the complete path from raw data to a reproducible, containerized full-stack ML service—not only a notebook or model score.
 
-[See it work](#see-it-work) · [Review the results](#results-at-a-glance) · [Run it locally](#setup) · [Use the API](#prediction-api) · [Deploy to Azure](#azure-container-apps-deployment) · [View the architecture](docs/architecture.md)
+[Try the live demo](https://sms-spam-demo-app.calmbay-8a13956d.germanywestcentral.azurecontainerapps.io) · [See it work](#see-it-work) · [Review the results](#results-at-a-glance) · [Run it locally](#setup) · [Use the API](#prediction-api) · [Deploy to Azure](#azure-container-apps-deployment) · [View the architecture](docs/architecture.md)
 
 ## At a Glance
 
@@ -22,6 +22,8 @@ Classify a new SMS as legitimate or spam, return a confidence score, and explore
 | What makes the evaluation credible? | Exact duplicate messages are kept out of both train and test, eliminating text overlap in the stricter evaluation. |
 
 ## See It Work
+
+[Open the live MessageGuard demo](https://sms-spam-demo-app.calmbay-8a13956d.germanywestcentral.azurecontainerapps.io). It runs on Azure Container Apps and scales to zero, so the first request after an idle period can take about 10–20 seconds. The hosted interaction uses the repository's synthetic demonstration model; the UCI benchmark metrics below describe the separately trained evaluation model.
 
 ![MessageGuard browser interface classifying a suspicious SMS as spam with 97.5 percent confidence](docs/assets/messageguard-demo.png)
 
