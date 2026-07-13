@@ -15,7 +15,7 @@ class AzureInfrastructureContractTest(unittest.TestCase):
         self.assertIn("maxReplicas: 1", template)
         self.assertIn("cpu: json('0.25')", template)
         self.assertIn("memory: '0.5Gi'", template)
-        self.assertIn("destination: 'none'", template)
+        self.assertNotIn("appLogsConfiguration", template)
         self.assertIn("@sha256:${imageDigest}", template)
 
     def test_baseline_avoids_persistent_paid_resource_types(self) -> None:
