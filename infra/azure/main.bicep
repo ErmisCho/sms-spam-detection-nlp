@@ -71,6 +71,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'PORT'
               value: '8000'
             }
+            {
+              name: 'SMS_SPAM_TRUST_X_FORWARDED_FOR'
+              value: 'true'
+            }
           ]
           resources: {
             cpu: json('0.25')

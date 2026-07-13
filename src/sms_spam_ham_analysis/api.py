@@ -11,6 +11,7 @@ import threading
 import time
 import uuid
 from collections import deque
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Literal
 
@@ -40,6 +41,7 @@ PREDICTION_PATHS = frozenset({"/predict", "/api/v1/predict"})
 MAX_REQUEST_BYTES_ENV = "SMS_SPAM_MAX_REQUEST_BYTES"
 RATE_LIMIT_REQUESTS_ENV = "SMS_SPAM_RATE_LIMIT_REQUESTS"
 RATE_LIMIT_WINDOW_ENV = "SMS_SPAM_RATE_LIMIT_WINDOW_SECONDS"
+TRUST_X_FORWARDED_FOR_ENV = "SMS_SPAM_TRUST_X_FORWARDED_FOR"
 REQUEST_TIMEOUT_ENV = "SMS_SPAM_REQUEST_TIMEOUT_SECONDS"
 DEFAULT_MAX_REQUEST_BYTES = 16_384
 DEFAULT_RATE_LIMIT_REQUESTS = 30
@@ -134,6 +136,7 @@ def create_app(
     max_request_bytes: int | None = None,
     rate_limit_requests: int | None = None,
     rate_limit_window_seconds: int | None = None,
+    trust_x_forwarded_for: bool | None = None,
     request_timeout_seconds: float | None = None,
 ) -> FastAPI:
     """Create an application with an explicit, testable model artifact path."""
@@ -147,6 +150,11 @@ def create_app(
     )
     resolved_rate_limit_window = rate_limit_window_seconds or _positive_int_env(
         RATE_LIMIT_WINDOW_ENV, DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+    )
+    resolved_trust_x_forwarded_for = (
+        trust_x_forwarded_for
+        if trust_x_forwarded_for is not None
+        else _boolean_env(TRUST_X_FORWARDED_FOR_ENV, False)
     )
     resolved_request_timeout = request_timeout_seconds or _positive_float_env(
         REQUEST_TIMEOUT_ENV, DEFAULT_REQUEST_TIMEOUT_SECONDS
@@ -180,7 +188,9 @@ def create_app(
                         content={"detail": "Request body is too large."},
                     )
                 else:
-                    client = request.client.host if request.client else "unknown"
+                    client = _rate_limit_client(
+                        request, trust_x_forwarded_for=resolved_trust_x_forwarded_for
+                    )
                     allowed, retry_after = rate_limiter.check(client)
                     if not allowed:
                         status = 429
@@ -310,6 +320,30 @@ def _positive_float_env(name: str, default: float) -> float:
     except ValueError:
         return default
     return value if value > 0 else default
+
+
+def _boolean_env(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _rate_limit_client(request: Request, *, trust_x_forwarded_for: bool) -> str:
+    if trust_x_forwarded_for:
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            azure_client = forwarded_for.rsplit(",", maxsplit=1)[-1].strip()
+            try:
+                return str(ip_address(azure_client))
+            except ValueError:
+                pass
+    return request.client.host if request.client else "unknown"
 
 
 def _model_is_ready(model_path: Path) -> bool:

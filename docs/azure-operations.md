@@ -124,6 +124,8 @@ The baseline caps scale at one replica. The API additionally defaults to:
 
 These values can be changed with `SMS_SPAM_RATE_LIMIT_REQUESTS`, `SMS_SPAM_RATE_LIMIT_WINDOW_SECONDS`, `SMS_SPAM_MAX_REQUEST_BYTES`, and `SMS_SPAM_REQUEST_TIMEOUT_SECONDS`. Do not raise them merely to hide an abuse test failure.
 
+The Azure template enables `SMS_SPAM_TRUST_X_FORWARDED_FOR` so the limiter keys on the rightmost `X-Forwarded-For` address added by Container Apps. Client-supplied addresses earlier in that header are ignored. Do not enable this setting behind an ingress that does not provide the same trusted rightmost-address contract.
+
 The limiter is intentionally in-process because the baseline permits only one replica. It is a portfolio safeguard, not a substitute for an authenticated gateway or distributed production rate limiter.
 
 ## Temporarily disable and re-enable public access
