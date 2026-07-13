@@ -8,6 +8,21 @@ End-to-end NLP pipeline for SMS spam detection using the public SMS Spam Collect
 
 This is an independent portfolio project.
 
+## Practical Example
+
+Give the trained model a new SMS message:
+
+> Congratulations, claim your free prize now
+
+It returns:
+
+```text
+Prediction: SPAM
+Confidence: 94.3%
+```
+
+This shows that the project is more than a static analysis: it packages the trained pipeline so it can classify previously unseen messages from the command line. The same prediction function could serve as the core of an API, moderation queue, or customer-support filtering tool. A production deployment would additionally require monitoring, security controls, privacy review, and periodic retraining.
+
 ![Conventional and duplicate-safe SMS spam classifier confusion matrices](outputs/figures/confusion_matrix.png)
 
 *The conventional split makes the model's 6 false positives and 7 false negatives reviewable, while the duplicate-safe matrix shows performance after eliminating identical train/test message overlap.*
@@ -103,25 +118,24 @@ Source: https://archive.ics.uci.edu/dataset/228/sms+spam+collection
 
 ## Setup
 
-Use Python 3.10 or newer from the repository root.
+Use Python 3.10 through 3.13 from the repository root. The recommended workflow uses [uv](https://docs.astral.sh/uv/); `uv.lock` pins a reproducible dependency set.
 
 Native Windows PowerShell:
 
 ```powershell
-python -m venv .venv-win
-.\.venv-win\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win"
+uv sync --locked
 ```
+
+The explicit Windows environment name avoids colliding with the Linux/WSL `.venv` when both systems use the same checkout.
 
 Linux or WSL:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+uv sync --locked
 ```
 
-`requirements.txt` installs the third-party libraries and the local `src/` package.
+If uv is unavailable, `requirements.txt` remains a pip-compatible fallback that installs the third-party libraries and local `src/` package.
 
 ## Run
 
@@ -159,28 +173,29 @@ bash scripts/run_pipeline.sh --full-azure --azure-clusters 8
 
 The Azure path is the GenAI embedding implementation. The local path creates classical TF-IDF/SVD vectors for reproducibility; it is not an LLM embedding model.
 
-Manual module commands after activating the virtual environment:
+Manual module commands with uv:
 
 ```bash
-python -m sms_spam_ham_analysis.data --input data/raw --output outputs/validated_sms_dataset.csv
-python -m sms_spam_ham_analysis.analysis --dataset outputs/validated_sms_dataset.csv
-python -m sms_spam_ham_analysis.modeling --dataset outputs/validated_sms_dataset.csv --model-out outputs/models/tfidf_classifier.joblib
-python -m sms_spam_ham_analysis.clustering --dataset outputs/validated_sms_dataset.csv --clusters auto
-python -m sms_spam_ham_analysis.visualize --outputs outputs
+uv run --frozen python -m sms_spam_ham_analysis.data --input data/raw --output outputs/validated_sms_dataset.csv
+uv run --frozen python -m sms_spam_ham_analysis.analysis --dataset outputs/validated_sms_dataset.csv
+uv run --frozen python -m sms_spam_ham_analysis.modeling --dataset outputs/validated_sms_dataset.csv --model-out outputs/models/tfidf_classifier.joblib
+uv run --frozen python -m sms_spam_ham_analysis.clustering --dataset outputs/validated_sms_dataset.csv --clusters auto
+uv run --frozen python -m sms_spam_ham_analysis.visualize --outputs outputs
 ```
 
 Try the trained classifier on a message (the local pipeline must have been run first):
 
-```bash
-python -m sms_spam_ham_analysis.predict "Congratulations, claim your free prize now"
+```powershell
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win" # Windows only; reuse the value set during setup
+uv run --frozen python -m sms_spam_ham_analysis.predict "Congratulations, claim your free prize now"
 ```
 
-The command prints the predicted `HAM`/`SPAM` label and the classifier's confidence.
+The command prints the predicted `HAM`/`SPAM` label and the classifier's confidence. On the current trained artifact, this example is classified as `SPAM` with 94.3% confidence.
 
 If the dataset has not been downloaded yet, run:
 
 ```bash
-python -m sms_spam_ham_analysis.download_data
+uv run --frozen python -m sms_spam_ham_analysis.download_data
 ```
 
 ## Azure Embeddings
@@ -229,17 +244,18 @@ Important generated files:
 Run the automated smoke tests without the real dataset:
 
 ```powershell
-.\.venv-win\Scripts\Activate.ps1
-python -m unittest discover -s tests
-python -m compileall -q src
+$env:UV_PROJECT_ENVIRONMENT = ".venv-win"
+uv sync --locked
+uv run --frozen python -m unittest discover -s tests
+uv run --frozen python -m compileall -q src
 ```
 
 Linux or WSL:
 
 ```bash
-source .venv/bin/activate
-python -m unittest discover -s tests
-python -m compileall -q src
+uv sync --locked
+uv run --frozen python -m unittest discover -s tests
+uv run --frozen python -m compileall -q src
 ```
 
 ## Limitations

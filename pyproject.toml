@@ -7,7 +7,7 @@ name = "sms-spam-detection-nlp"
 version = "0.1.0"
 description = "End-to-end SMS spam detection NLP pipeline with semantic clustering."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 license = { text = "MIT" }
 authors = [{ name = "Ermis Chorinopoulos" }]
 keywords = ["nlp", "spam-detection", "scikit-learn", "text-classification"]
@@ -40,3 +40,5 @@ Issues = "https://github.com/ErmisCho/sms-spam-detection-nlp/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.uv]
+required-version = ">=0.11,<0.12"
