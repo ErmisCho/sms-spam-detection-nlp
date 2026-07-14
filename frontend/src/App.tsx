@@ -150,7 +150,7 @@ export default function App() {
       <header className="app-header">
         <div className="header-inner">
           <a className="brand" href="#main" aria-label="MessageGuard home">
-            <span className="brand-mark" aria-hidden="true">M</span>
+            <img className="brand-mark" src="/assets/favicon.svg" alt="" />
             <span>
               <strong>MessageGuard</strong>
               <small>SMS classification service</small>
