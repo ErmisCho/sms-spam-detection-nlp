@@ -88,15 +88,8 @@ textarea:focus-visible {
 }
 
 .brand-mark {
-  display: grid;
   width: 36px;
   height: 36px;
-  place-items: center;
-  border-radius: 7px;
-  color: #ffffff;
-  background: #17365d;
-  font-size: 0.91rem;
-  font-weight: 700;
 }
 
 .brand > span:last-child {
