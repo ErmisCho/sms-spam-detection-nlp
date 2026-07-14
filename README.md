@@ -25,7 +25,7 @@ Classify a new SMS as legitimate or spam, return a confidence score, and explore
 
 [Open the live MessageGuard demo](https://sms-spam-demo-app.calmbay-8a13956d.germanywestcentral.azurecontainerapps.io). It runs on Azure Container Apps and scales to zero, so the first request after an idle period can take about 10–20 seconds. The hosted interaction uses the repository's synthetic demonstration model; the UCI benchmark metrics below describe the separately trained evaluation model.
 
-![MessageGuard browser interface classifying a suspicious SMS as spam with 97.5 percent confidence](docs/assets/messageguard-demo.png)
+![MessageGuard browser interface classifying five sample SMS messages](docs/assets/messageguard-demo.gif)
 
 The responsive MessageGuard interface sends a new SMS to the same tested prediction function used by the CLI and API. It displays the HAM/SPAM label, confidence, round-trip latency, model readiness, and actionable error states without storing message content in application logs.
 
