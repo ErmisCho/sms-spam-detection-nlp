@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.11.21 AS uv
+FROM ghcr.io/astral-sh/uv:0.11.28 AS uv
 
 FROM node:20.20-alpine AS frontend
 
